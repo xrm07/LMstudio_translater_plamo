@@ -11,7 +11,8 @@
   ],
 
   "host_permissions": [
-    "http://localhost:1234/*"
+    "http://*/*",
+    "https://*/*"
   ],
 
   "background": {
