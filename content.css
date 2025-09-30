@@ -1,0 +1,254 @@
+/**
+ * PLaMo Translate - Content Script Styles
+ * Webページ上でのポップアップスタイル
+ */
+
+.plamo-translate-popup {
+  position: absolute;
+  width: 400px;
+  max-width: 90vw;
+  background: #ffffff;
+  border: 1px solid #cccccc;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  color: #333333;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.plamo-translate-popup.plamo-translate-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+  .plamo-translate-popup {
+    background: #2d2d2d;
+    border-color: #555555;
+    color: #e0e0e0;
+  }
+
+  .plamo-translate-header {
+    background: #1a1a1a !important;
+    border-bottom-color: #555555 !important;
+  }
+
+  .plamo-translate-label {
+    color: #aaaaaa !important;
+  }
+
+  .plamo-translate-text {
+    background: #1a1a1a !important;
+    color: #e0e0e0 !important;
+  }
+
+  .plamo-translate-divider {
+    color: #666666 !important;
+  }
+
+  .plamo-translate-footer {
+    border-top-color: #555555 !important;
+    color: #aaaaaa !important;
+  }
+
+  .plamo-translate-copy,
+  .plamo-translate-close {
+    background: #3a3a3a !important;
+    color: #e0e0e0 !important;
+  }
+
+  .plamo-translate-copy:hover,
+  .plamo-translate-close:hover {
+    background: #4a4a4a !important;
+  }
+
+  .plamo-translate-error-message {
+    background: #3d1f1f !important;
+    color: #ff9999 !important;
+  }
+
+  .plamo-translate-error-hint {
+    background: #2a2a2a !important;
+    color: #cccccc !important;
+  }
+}
+
+/* ヘッダー */
+.plamo-translate-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+  border-radius: 8px 8px 0 0;
+}
+
+.plamo-translate-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1a73e8;
+}
+
+.plamo-translate-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: #666666;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.plamo-translate-close:hover {
+  background: #e0e0e0;
+}
+
+/* ボディ */
+.plamo-translate-body {
+  padding: 16px;
+}
+
+.plamo-translate-section {
+  margin-bottom: 12px;
+}
+
+.plamo-translate-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666666;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.plamo-translate-text {
+  padding: 10px 12px;
+  background: #f9f9f9;
+  border-radius: 6px;
+  line-height: 1.6;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.plamo-translate-text.plamo-original {
+  color: #555555;
+}
+
+.plamo-translate-text.plamo-translated {
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.plamo-translate-divider {
+  text-align: center;
+  color: #1a73e8;
+  font-size: 20px;
+  margin: 8px 0;
+}
+
+/* フッター */
+.plamo-translate-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.plamo-translate-time {
+  font-size: 12px;
+  color: #888888;
+}
+
+.plamo-translate-copy {
+  background: #1a73e8;
+  color: #ffffff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.plamo-translate-copy:hover {
+  background: #1557b0;
+}
+
+.plamo-translate-copy:active {
+  background: #0d47a1;
+}
+
+/* エラー表示 */
+.plamo-translate-popup.plamo-translate-error .plamo-translate-title {
+  color: #d32f2f;
+}
+
+.plamo-translate-error-message {
+  padding: 12px;
+  background: #ffebee;
+  color: #c62828;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.plamo-translate-error-hint {
+  padding: 12px;
+  background: #f5f5f5;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #666666;
+}
+
+.plamo-translate-error-hint strong {
+  color: #333333;
+}
+
+/* スクロールバーのスタイル */
+.plamo-translate-text::-webkit-scrollbar {
+  width: 6px;
+}
+
+.plamo-translate-text::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.plamo-translate-text::-webkit-scrollbar-thumb {
+  background: #cccccc;
+  border-radius: 3px;
+}
+
+.plamo-translate-text::-webkit-scrollbar-thumb:hover {
+  background: #aaaaaa;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 480px) {
+  .plamo-translate-popup {
+    width: calc(100vw - 40px);
+    max-width: none;
+  }
+
+  .plamo-translate-text {
+    max-height: 150px;
+  }
+}

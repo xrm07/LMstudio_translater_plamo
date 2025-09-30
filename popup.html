@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PLaMo Translate 設定</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- ヘッダー -->
+    <div class="popup-header">
+      <h1 class="popup-title">PLaMo Translate</h1>
+      <div class="popup-version">v1.0.0</div>
+    </div>
+
+    <!-- タブナビゲーション -->
+    <div class="popup-tabs">
+      <button class="popup-tab active" data-tab="settings">⚙️ 設定</button>
+      <button class="popup-tab" data-tab="history">📜 履歴</button>
+      <button class="popup-tab" data-tab="about">ℹ️ について</button>
+    </div>
+
+    <!-- 設定タブ -->
+    <div class="popup-content" id="settings-tab">
+      <div class="form-group">
+        <label for="lmstudio-url" class="form-label">LM Studio URL</label>
+        <input
+          type="text"
+          id="lmstudio-url"
+          class="form-input"
+          placeholder="http://localhost:1234"
+        >
+        <div class="form-hint">LM Studioのローカルサーバーアドレス</div>
+      </div>
+
+      <div class="form-group">
+        <label for="model-name" class="form-label">モデル名</label>
+        <input
+          type="text"
+          id="model-name"
+          class="form-input"
+          placeholder="mmnga/plamo-2-translate-gguf"
+        >
+        <div class="form-hint">使用する翻訳モデルの識別子</div>
+      </div>
+
+      <div class="form-group">
+        <label for="max-tokens" class="form-label">最大トークン数</label>
+        <input
+          type="number"
+          id="max-tokens"
+          class="form-input"
+          min="100"
+          max="4096"
+          placeholder="1000"
+        >
+        <div class="form-hint">翻訳結果の最大長（100〜4096）</div>
+      </div>
+
+      <div class="button-group">
+        <button id="test-connection" class="btn btn-secondary">🔌 接続テスト</button>
+        <button id="save-settings" class="btn btn-primary">💾 保存</button>
+      </div>
+
+      <div id="status-message" class="status-message"></div>
+    </div>
+
+    <!-- 履歴タブ -->
+    <div class="popup-content hidden" id="history-tab">
+      <div class="history-controls">
+        <button id="clear-history" class="btn btn-danger-outline">🗑️ 履歴を消去</button>
+      </div>
+      <div id="history-list" class="history-list">
+        <div class="history-empty">翻訳履歴はありません</div>
+      </div>
+    </div>
+
+    <!-- Aboutタブ -->
+    <div class="popup-content hidden" id="about-tab">
+      <div class="about-section">
+        <h2 class="about-title">PLaMo Translate について</h2>
+        <p class="about-text">
+          ローカルで動作するPLaMo Translateモデルを使用した、プライバシー重視の日英翻訳Chrome拡張機能です。
+        </p>
+      </div>
+
+      <div class="about-section">
+        <h3 class="about-subtitle">使い方</h3>
+        <ol class="about-list">
+          <li>Webページ上で翻訳したいテキストを選択</li>
+          <li>右クリックメニューから「PLaMoで翻訳」を選択</li>
+          <li>翻訳結果がポップアップで表示されます</li>
+        </ol>
+      </div>
+
+      <div class="about-section">
+        <h3 class="about-subtitle">前提条件</h3>
+        <ul class="about-list">
+          <li>LM Studioがインストール済み</li>
+          <li>PLaMo Translate (GGUF版) がダウンロード済み</li>
+          <li>LM Studioサーバーが起動中 (localhost:1234)</li>
+        </ul>
+      </div>
+
+      <div class="about-section">
+        <h3 class="about-subtitle">リンク</h3>
+        <div class="about-links">
+          <a href="https://lmstudio.ai/" target="_blank" class="about-link">LM Studio 公式サイト</a>
+          <a href="https://huggingface.co/mmnga/plamo-2-translate-gguf" target="_blank" class="about-link">PLaMo Translate (GGUF)</a>
+          <a href="https://www.preferred.jp/" target="_blank" class="about-link">Preferred Networks</a>
+        </div>
+      </div>
+
+      <div class="about-footer">
+        <p class="about-copyright">© 2025 PLaMo Translate Extension</p>
+        <p class="about-license">MIT License | Model: PLaMo Community License</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
