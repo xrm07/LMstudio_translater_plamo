@@ -8,15 +8,24 @@ const DEFAULT_SETTINGS = {
   lmStudioUrl: 'http://localhost:1234',
   modelName: 'mmnga/plamo-2-translate-gguf',
   maxTokens: 1000,
-  temperature: 0
+  temperature: 0,
+  autoOpenPopup: true
 };
 
 // 拡張機能インストール時の初期化
 chrome.runtime.onInstalled.addListener(() => {
-  // デフォルト設定を保存
+  // デフォルト設定を保存（既存ユーザーも不足しているキーを補完）
   chrome.storage.local.get(['settings'], (result) => {
-    if (!result.settings) {
-      chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
+    const existingSettings = result.settings || {};
+    const mergedSettings = {
+      ...DEFAULT_SETTINGS,
+      ...existingSettings
+    };
+
+    const needsUpdate = !result.settings || Object.keys(DEFAULT_SETTINGS).some((key) => existingSettings[key] === undefined);
+
+    if (needsUpdate) {
+      chrome.storage.local.set({ settings: mergedSettings });
     }
   });
 
@@ -31,7 +40,43 @@ chrome.runtime.onInstalled.addListener(() => {
 // コンテキストメニューのクリックイベント
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === 'translate-with-plamo' && info.selectionText) {
-    handleTranslation(info.selectionText, tab.id);
+    const tabUrl = tab?.url || '';
+    handleTranslation(info.selectionText, tab.id, tabUrl);
+  }
+});
+
+// キーボードショートカットのハンドリング
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== 'translate-selection') {
+    return;
+  }
+
+  try {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!activeTab || !activeTab.id) {
+      return;
+    }
+
+    chrome.tabs.sendMessage(activeTab.id, { action: 'getSelectionText' }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn('Failed to retrieve selection text:', chrome.runtime.lastError.message);
+        return;
+      }
+
+      const selectionText = response?.text?.trim();
+      if (!selectionText) {
+        chrome.tabs.sendMessage(activeTab.id, {
+          action: 'showError',
+          error: 'テキストが選択されていません。先にテキストを選択してください。'
+        });
+        return;
+      }
+
+      const tabUrl = activeTab.url || '';
+      handleTranslation(selectionText, activeTab.id, tabUrl);
+    });
+  } catch (error) {
+    console.error('Command handling error:', error);
   }
 });
 
@@ -63,7 +108,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  * @param {string} text - 翻訳対象テキスト
  * @param {number} tabId - 対象タブのID
  */
-async function handleTranslation(text, tabId) {
+async function handleTranslation(text, tabId, tabUrl = '') {
   try {
     // 言語検出
     const sourceLang = detectLanguage(text);
@@ -83,14 +128,23 @@ async function handleTranslation(text, tabId) {
         processingTime: result.processingTime
       });
 
-      // 翻訳履歴に保存
-      saveToHistory({
+      const baseEntry = {
         originalText: text,
         translatedText: result.translation,
         sourceLang: sourceLang,
         targetLang: targetLang,
-        timestamp: Date.now()
-      });
+        timestamp: Date.now(),
+        url: tabUrl
+      };
+
+      // 翻訳履歴に保存
+      const storedEntry = await saveToHistory(baseEntry);
+
+      // 最新翻訳を保存
+      await chrome.storage.local.set({ latestTranslation: storedEntry });
+
+      // オプションに応じてポップアップを自動表示
+      await maybeAutoOpenPopup();
     } else {
       // エラーをcontent scriptに送信
       chrome.tabs.sendMessage(tabId, {
@@ -248,11 +302,10 @@ async function saveToHistory(entry) {
     const result = await chrome.storage.local.get(['history']);
     let history = result.history || [];
 
-    // 新しいエントリを追加
-    history.unshift({
-      id: generateUUID(),
-      ...entry
-    });
+    // 新しいエントリを生成
+    const storedEntry = entry.id ? { ...entry } : { id: generateUUID(), ...entry };
+
+    history.unshift(storedEntry);
 
     // 最大50件に制限
     if (history.length > 50) {
@@ -260,8 +313,69 @@ async function saveToHistory(entry) {
     }
 
     await chrome.storage.local.set({ history: history });
+    return storedEntry;
   } catch (error) {
     console.error('Failed to save history:', error);
+    return null;
+  }
+}
+
+/**
+ * 設定に応じてアクションポップアップを自動表示
+ */
+async function maybeAutoOpenPopup() {
+  try {
+    const result = await chrome.storage.local.get(['settings']);
+    const settings = result.settings
+      ? { ...DEFAULT_SETTINGS, ...result.settings }
+      : { ...DEFAULT_SETTINGS };
+
+    if (!settings.autoOpenPopup) {
+      return;
+    }
+
+    if (typeof chrome?.action?.openPopup !== 'function') {
+      await chrome.storage.local.set({
+        autoOpenPopupNotice: {
+          type: 'UNSUPPORTED',
+          timestamp: Date.now()
+        }
+      });
+      return;
+    }
+
+    if (typeof chrome?.action?.getUserSettings === 'function') {
+      try {
+        const userSettings = await chrome.action.getUserSettings();
+        if (userSettings && userSettings.isOnToolbar === false) {
+          await chrome.storage.local.set({
+            autoOpenPopupNotice: {
+              type: 'ACTION_HIDDEN',
+              timestamp: Date.now()
+            }
+          });
+          return;
+        }
+      } catch (settingsError) {
+        console.warn('Failed to read action user settings:', settingsError);
+      }
+    }
+
+    await chrome.action.openPopup();
+    await chrome.storage.local.set({ autoOpenPopupNotice: null });
+  } catch (error) {
+    console.warn('Auto-open popup failed:', error);
+    try {
+      await chrome.storage.local.set({
+        autoOpenPopupNotice: {
+          type: 'OPEN_FAILED',
+          message: error?.message || '',
+          timestamp: Date.now()
+        }
+      });
+    } catch (storageError) {
+      console.warn('Failed to persist auto-open notice:', storageError);
+    }
   }
 }
 
