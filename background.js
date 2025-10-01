@@ -8,7 +8,8 @@ const DEFAULT_SETTINGS = {
   lmStudioUrl: 'http://localhost:1234',
   modelName: 'mmnga/plamo-2-translate-gguf',
   maxTokens: 1000,
-  temperature: 0
+  temperature: 0,
+  autoShowPopup: true
 };
 
 // 拡張機能インストール時の初期化
@@ -84,13 +85,19 @@ async function handleTranslation(text, tabId) {
       });
 
       // 翻訳履歴に保存
-      saveToHistory({
+      const translationData = {
         originalText: text,
         translatedText: result.translation,
         sourceLang: sourceLang,
         targetLang: targetLang,
-        timestamp: Date.now()
-      });
+        timestamp: Date.now(),
+        processingTime: result.processingTime
+      };
+      
+      saveToHistory(translationData);
+      
+      // 最新の翻訳データを保存（ポップアップ表示用）
+      chrome.storage.local.set({ latestTranslation: translationData });
     } else {
       // エラーをcontent scriptに送信
       chrome.tabs.sendMessage(tabId, {

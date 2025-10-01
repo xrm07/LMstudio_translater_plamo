@@ -16,13 +16,24 @@
 
     <!-- タブナビゲーション -->
     <div class="popup-tabs">
-      <button class="popup-tab active" data-tab="settings">⚙️ 設定</button>
+      <button class="popup-tab active" data-tab="latest">✨ 最新</button>
+      <button class="popup-tab" data-tab="settings">⚙️ 設定</button>
       <button class="popup-tab" data-tab="history">📜 履歴</button>
       <button class="popup-tab" data-tab="about">ℹ️ について</button>
     </div>
 
+    <!-- 最新翻訳タブ -->
+    <div class="popup-content" id="latest-tab">
+      <div id="latest-translation" class="latest-translation">
+        <div class="latest-empty">
+          <p>まだ翻訳がありません</p>
+          <p class="latest-hint">テキストを選択して右クリックから翻訳を実行してください</p>
+        </div>
+      </div>
+    </div>
+
     <!-- 設定タブ -->
-    <div class="popup-content" id="settings-tab">
+    <div class="popup-content hidden" id="settings-tab">
       <div class="form-group">
         <label for="lmstudio-url" class="form-label">LM Studio URL</label>
         <input
@@ -56,6 +67,18 @@
           placeholder="1000"
         >
         <div class="form-hint">翻訳結果の最大長（100〜4096）</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-checkbox-label">
+          <input
+            type="checkbox"
+            id="auto-show-popup"
+            class="form-checkbox"
+          >
+          <span>翻訳完了時にポップアップを自動表示</span>
+        </label>
+        <div class="form-hint">翻訳が完了したら自動的に拡張機能のポップアップを開きます</div>
       </div>
 
       <div class="button-group">

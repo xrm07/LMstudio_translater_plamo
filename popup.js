@@ -10,6 +10,7 @@ const tabContents = document.querySelectorAll('.popup-content');
 const lmstudioUrlInput = document.getElementById('lmstudio-url');
 const modelNameInput = document.getElementById('model-name');
 const maxTokensInput = document.getElementById('max-tokens');
+const autoShowPopupCheckbox = document.getElementById('auto-show-popup');
 
 const testConnectionButton = document.getElementById('test-connection');
 const saveSettingsButton = document.getElementById('save-settings');
@@ -17,12 +18,15 @@ const statusMessage = document.getElementById('status-message');
 
 const clearHistoryButton = document.getElementById('clear-history');
 const historyList = document.getElementById('history-list');
+const latestTranslationDiv = document.getElementById('latest-translation');
 
 // 初期化
 document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
+  loadLatestTranslation();
   loadHistory();
   initTabs();
+  initStorageListener();
 });
 
 /**
@@ -64,6 +68,11 @@ function switchTab(tabName) {
   if (tabName === 'history') {
     loadHistory();
   }
+  
+  // 最新タブを開いた時は最新翻訳を更新
+  if (tabName === 'latest') {
+    loadLatestTranslation();
+  }
 }
 
 /**
@@ -75,12 +84,14 @@ function loadSettings() {
       lmStudioUrl: 'http://localhost:1234',
       modelName: 'mmnga/plamo-2-translate-gguf',
       maxTokens: 1000,
-      temperature: 0
+      temperature: 0,
+      autoShowPopup: true
     };
 
     lmstudioUrlInput.value = settings.lmStudioUrl;
     modelNameInput.value = settings.modelName;
     maxTokensInput.value = settings.maxTokens;
+    autoShowPopupCheckbox.checked = settings.autoShowPopup !== false; // デフォルトはtrue
   });
 }
 
@@ -92,7 +103,8 @@ function saveSettings() {
     lmStudioUrl: lmstudioUrlInput.value.trim(),
     modelName: modelNameInput.value.trim(),
     maxTokens: parseInt(maxTokensInput.value, 10),
-    temperature: 0
+    temperature: 0,
+    autoShowPopup: autoShowPopupCheckbox.checked
   };
 
   // バリデーション
@@ -172,9 +184,9 @@ function loadHistory() {
       return;
     }
 
-    // 履歴を表示
-    historyList.innerHTML = history.map(entry => `
-      <div class="history-item">
+    // 履歴を表示（最新のエントリには特別なクラスを追加）
+    historyList.innerHTML = history.map((entry, index) => `
+      <div class="history-item${index === 0 ? ' history-item-latest' : ''}">
         <div class="history-header">
           <span class="history-lang">${entry.sourceLang} → ${entry.targetLang}</span>
           <span class="history-time">${formatTimestamp(entry.timestamp)}</span>
@@ -246,6 +258,98 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+/**
+ * 最新翻訳を読み込み
+ */
+function loadLatestTranslation() {
+  chrome.storage.local.get(['latestTranslation'], (result) => {
+    const latest = result.latestTranslation;
+    
+    if (!latest) {
+      latestTranslationDiv.innerHTML = `
+        <div class="latest-empty">
+          <p>まだ翻訳がありません</p>
+          <p class="latest-hint">テキストを選択して右クリックから翻訳を実行してください</p>
+        </div>
+      `;
+      return;
+    }
+    
+    // 最新翻訳を表示
+    latestTranslationDiv.innerHTML = `
+      <div class="latest-card">
+        <div class="latest-header">
+          <span class="latest-lang">${latest.sourceLang} → ${latest.targetLang}</span>
+          <span class="latest-time">${formatTimestamp(latest.timestamp)}</span>
+        </div>
+        <div class="latest-section">
+          <div class="latest-label">元のテキスト:</div>
+          <div class="latest-text latest-original">${escapeHtml(latest.originalText)}</div>
+        </div>
+        <div class="latest-divider">↓</div>
+        <div class="latest-section">
+          <div class="latest-label">翻訳結果:</div>
+          <div class="latest-text latest-translated">${escapeHtml(latest.translatedText)}</div>
+        </div>
+        <div class="latest-footer">
+          <span class="latest-processing">処理時間: ${(latest.processingTime / 1000).toFixed(2)}秒</span>
+          <button class="btn btn-secondary btn-copy" id="copy-latest">📋 コピー</button>
+        </div>
+      </div>
+    `;
+    
+    // コピーボタンのイベントリスナー
+    const copyButton = document.getElementById('copy-latest');
+    if (copyButton) {
+      copyButton.addEventListener('click', () => {
+        copyToClipboard(latest.translatedText);
+        copyButton.textContent = '✓ コピーしました';
+        setTimeout(() => {
+          copyButton.textContent = '📋 コピー';
+        }, 2000);
+      });
+    }
+  });
+}
+
+/**
+ * クリップボードにコピー
+ * @param {string} text - コピーするテキスト
+ */
+function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(err => {
+      console.error('Failed to copy text:', err);
+    });
+  }
+}
+
+/**
+ * ストレージ変更のリスナーを初期化
+ */
+function initStorageListener() {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.latestTranslation) {
+      // 最新翻訳が更新されたら表示を更新
+      loadLatestTranslation();
+      
+      // 現在履歴タブを開いている場合は履歴も更新
+      const activeTab = document.querySelector('.popup-tab.active');
+      if (activeTab && activeTab.dataset.tab === 'history') {
+        loadHistory();
+      }
+      
+      // 最新タブに自動切り替え（設定で有効な場合）
+      chrome.storage.local.get(['settings'], (result) => {
+        const settings = result.settings || {};
+        if (settings.autoShowPopup !== false) {
+          switchTab('latest');
+        }
+      });
+    }
+  });
 }
 
 // イベントリスナー
