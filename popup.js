@@ -43,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initStorageListeners();
 
   loadSettings();
-  loadLatestTranslation();
   loadHistory();
   checkAutoOpenSupport();
 

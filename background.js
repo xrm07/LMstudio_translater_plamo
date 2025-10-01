@@ -138,13 +138,28 @@ async function handleTranslation(text, tabId, tabUrl = '') {
       };
 
       // 翻訳履歴に保存
-      const storedEntry = await saveToHistory(baseEntry);
+      let storedEntry = null;
+      try {
+        storedEntry = await saveToHistory(baseEntry);
+      } catch (historyError) {
+        console.error('Failed to persist translation history:', historyError);
+      }
 
       // 最新翻訳を保存
-      await chrome.storage.local.set({ latestTranslation: storedEntry });
+      if (storedEntry) {
+        try {
+          await chrome.storage.local.set({ latestTranslation: storedEntry });
+        } catch (latestError) {
+          console.error('Failed to update latestTranslation:', latestError);
+        }
+      } else {
+        console.warn('Latest translation not updated because history entry was unavailable.');
+      }
 
       // オプションに応じてポップアップを自動表示
-      await maybeAutoOpenPopup();
+      maybeAutoOpenPopup().catch((popupError) => {
+        console.warn('maybeAutoOpenPopup rejection:', popupError);
+      });
     } else {
       // エラーをcontent scriptに送信
       chrome.tabs.sendMessage(tabId, {
@@ -335,12 +350,16 @@ async function maybeAutoOpenPopup() {
     }
 
     if (typeof chrome?.action?.openPopup !== 'function') {
-      await chrome.storage.local.set({
-        autoOpenPopupNotice: {
-          type: 'UNSUPPORTED',
-          timestamp: Date.now()
-        }
-      });
+      try {
+        await chrome.storage.local.set({
+          autoOpenPopupNotice: {
+            type: 'UNSUPPORTED',
+            timestamp: Date.now()
+          }
+        });
+      } catch (storageError) {
+        console.warn('Failed to persist unsupported auto-open notice:', storageError);
+      }
       return;
     }
 
@@ -348,12 +367,16 @@ async function maybeAutoOpenPopup() {
       try {
         const userSettings = await chrome.action.getUserSettings();
         if (userSettings && userSettings.isOnToolbar === false) {
-          await chrome.storage.local.set({
-            autoOpenPopupNotice: {
-              type: 'ACTION_HIDDEN',
-              timestamp: Date.now()
-            }
-          });
+          try {
+            await chrome.storage.local.set({
+              autoOpenPopupNotice: {
+                type: 'ACTION_HIDDEN',
+                timestamp: Date.now()
+              }
+            });
+          } catch (storageError) {
+            console.warn('Failed to persist hidden action notice:', storageError);
+          }
           return;
         }
       } catch (settingsError) {
@@ -362,7 +385,11 @@ async function maybeAutoOpenPopup() {
     }
 
     await chrome.action.openPopup();
-    await chrome.storage.local.set({ autoOpenPopupNotice: null });
+    try {
+      await chrome.storage.local.set({ autoOpenPopupNotice: null });
+    } catch (storageError) {
+      console.warn('Failed to clear auto-open notice:', storageError);
+    }
   } catch (error) {
     console.warn('Auto-open popup failed:', error);
     try {

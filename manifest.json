@@ -35,6 +35,16 @@
     }
   },
 
+  "commands": {
+    "translate-selection": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "選択中のテキストをPLaMoで翻訳"
+    }
+  },
+
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
