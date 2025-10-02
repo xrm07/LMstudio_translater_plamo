@@ -216,9 +216,7 @@ async function testConnection() {
       renderModelOptions(availableModels);
 
       if (availableModels.length > 0 && !availableModels.includes(modelNameInput.value.trim())) {
-        if (!modelNameInput.value.trim()) {
-          modelNameInput.value = availableModels[0];
-        }
+        modelNameInput.value = availableModels[0];
       }
 
       chrome.storage.local.set({ availableModels });
