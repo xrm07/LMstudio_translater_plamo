@@ -158,7 +158,13 @@ async function handleTranslation(text, tabId, tabUrl = '') {
 
       // オプションに応じてポップアップを自動表示
       maybeAutoOpenPopup().catch((popupError) => {
-        console.warn('maybeAutoOpenPopup rejection:', popupError);
+        if (popupError instanceof Error) {
+          console.warn(
+            `maybeAutoOpenPopup rejection: [${popupError.name}] ${popupError.message}\n${popupError.stack}`
+          );
+        } else {
+          console.warn('maybeAutoOpenPopup rejection:', popupError);
+        }
       });
     } else {
       // エラーをcontent scriptに送信
