@@ -22,7 +22,7 @@ chrome.runtime.onInstalled.addListener(() => {
       ...existingSettings
     };
 
-    const needsUpdate = !result.settings || Object.keys(DEFAULT_SETTINGS).some((key) => existingSettings[key] === undefined);
+    const needsUpdate = !result.settings || Object.keys(DEFAULT_SETTINGS).some((key) => !(key in existingSettings));
 
     if (needsUpdate) {
       chrome.storage.local.set({ settings: mergedSettings });
