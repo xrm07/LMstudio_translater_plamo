@@ -336,7 +336,7 @@ function formatTimestamp(timestamp) {
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
-  return div.textContent;
+  return div.innerHTML;
 }
 
 // イベントリスナー

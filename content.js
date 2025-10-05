@@ -193,7 +193,6 @@ function showErrorPopup(errorMessage) {
   positionPopup(popup);
 
   // イベントリスナーを追加
-  const closeButton = popup.querySelector('.plamo-translate-close');
   closeButton.addEventListener('click', () => removeExistingPopup());
 
   // 外側クリックで閉じる
@@ -371,8 +370,8 @@ function fallbackCopyToClipboard(text) {
  * @returns {string} - エスケープ済みテキスト
  */
 function escapeHtml(text) {
-  // 非推奨: innerHTMLに依存しない実装へ移行済み
+  // 安全なHTMLエスケープ: textContentを設定してinnerHTMLを取得
   const div = document.createElement('div');
   div.textContent = text;
-  return div.textContent;
+  return div.innerHTML;
 }
