@@ -45,5 +45,4 @@ jobs:
         name: e2e-test-results
         path: |
           test-results/
-          screenshots/
         retention-days: 7

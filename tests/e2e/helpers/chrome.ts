@@ -1,4 +1,5 @@
 import puppeteer, { Browser, Page, Target } from 'puppeteer';
+import { promises as fs } from 'fs';
 
 export interface ExtensionContext {
   browser: Browser;
@@ -22,6 +23,7 @@ export async function launchWithExtension(extensionPath: string): Promise<Extens
       // CI 安定化用フラグ
       '--no-sandbox',
       '--disable-gpu',
+      '--disable-dev-shm-usage',
       // 開発モード用の追加フラグ
       '--disable-web-security',
       '--disable-features=VizDisplayCompositor'
@@ -96,14 +98,16 @@ export async function takeScreenshot(page: Page, filename: string): Promise<void
   const screenshotsDir = './test-results/screenshots';
   try {
     // テスト結果ディレクトリを作成（存在しない場合）
-    const fs = require('fs').promises;
     await fs.mkdir(screenshotsDir, { recursive: true });
 
     const filepath = `${screenshotsDir}/${filename}.png`;
     await page.screenshot({ path: filepath, fullPage: true });
     console.log(`Screenshot saved: ${filepath}`);
   } catch (error) {
-    console.warn(`Failed to save screenshot: ${error.message}`);
+    const errorMsg = (typeof error === 'object' && error !== null && 'message' in (error as any))
+      ? (error as any).message
+      : String(error);
+    console.warn(`Failed to save screenshot: ${errorMsg}`);
   }
 }
 

@@ -54,6 +54,7 @@ export class LmStubServer {
     // チャット完了エンドポイント
     this.app.post('/v1/chat/completions', (req: Request, res: Response) => {
       const responseText = options.chatResponse || 'これはテスト翻訳結果です。';
+      const promptLen = (Array.isArray(req.body?.messages) && req.body.messages[0]?.content?.length) ? req.body.messages[0].content.length : 0;
 
       const responseBody = {
         id: 'chatcmpl-test',
@@ -71,9 +72,9 @@ export class LmStubServer {
           }
         ],
         usage: {
-          prompt_tokens: req.body.messages?.[0]?.content?.length || 0,
+          prompt_tokens: promptLen,
           completion_tokens: responseText.length,
-          total_tokens: (req.body.messages?.[0]?.content?.length || 0) + responseText.length
+          total_tokens: promptLen + responseText.length
         }
       };
 

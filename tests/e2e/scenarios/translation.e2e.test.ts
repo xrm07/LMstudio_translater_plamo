@@ -35,11 +35,7 @@ describe('PLaMo Translate拡張機能 - 翻訳機能E2Eテスト', () => {
     }
   }, 30000);
 
-  // エラーハンドリングでスクリーンショットを保存
-  process.on('unhandledRejection', async (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    // テスト失敗時のスクリーンショット保存は各テスト内で個別に行う
-  });
+  // グローバルなUnhandledRejectionハンドラはsetupへ移動
 
   const ensureControlPage = async () => {
     if (!controlPage || controlPage.isClosed()) {
