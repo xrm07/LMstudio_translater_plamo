@@ -1,13 +1,36 @@
-import express, { Request, Response, Application } from 'express';
+import express, { type Application, type Request, type Response, type NextFunction } from 'express';
 import { Server } from 'http';
 import path from 'path';
-import { AddressInfo } from 'net';
+import type { AddressInfo } from 'net';
 
 export interface LmStubOptions {
   port?: number;
-  models?: Array<{id: string, object: string}>;
+  models?: Array<{ id: string; object: string }>;
   chatResponse?: string;
   delay?: number; // レスポンス遅延（ミリ秒）
+}
+
+interface ChatMessage {
+  content?: unknown;
+}
+
+interface ChatCompletionRequestBody {
+  model?: string;
+  messages?: ChatMessage[];
+}
+
+function calculatePromptLength(body: ChatCompletionRequestBody): number {
+  const content = body.messages?.[0]?.content;
+  if (typeof content === 'string') {
+    return content.length;
+  }
+  if (Array.isArray(content)) {
+    return content.map(item => String(item)).join('').length;
+  }
+  if (content !== undefined && content !== null) {
+    return String(content).length;
+  }
+  return 0;
 }
 
 /**
@@ -28,7 +51,7 @@ export class LmStubServer {
     this.app.use('/fixtures', express.static(fixturesPath));
 
     // CORS許可
-    this.app.use((req, res, next) => {
+    this.app.use((req: Request, res: Response, next: NextFunction) => {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Headers', 'Content-Type');
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -36,7 +59,7 @@ export class LmStubServer {
     });
 
     // モデル一覧エンドポイント
-    this.app.get('/v1/models', (req: Request, res: Response) => {
+    this.app.get('/v1/models', (_req: Request, res: Response) => {
       const models = options.models || [
         { id: 'mmnga/plamo-2-translate-gguf', object: 'model' },
         { id: 'test-model-1', object: 'model' }
@@ -54,13 +77,14 @@ export class LmStubServer {
     // チャット完了エンドポイント
     this.app.post('/v1/chat/completions', (req: Request, res: Response) => {
       const responseText = options.chatResponse || 'これはテスト翻訳結果です。';
-      const promptLen = (Array.isArray(req.body?.messages) && req.body.messages[0]?.content?.length) ? req.body.messages[0].content.length : 0;
+      const body = req.body as ChatCompletionRequestBody;
+      const promptLength = calculatePromptLength(body);
 
       const responseBody = {
         id: 'chatcmpl-test',
         object: 'chat.completion',
         created: Date.now(),
-        model: req.body.model || 'test-model',
+        model: body.model || 'test-model',
         choices: [
           {
             index: 0,
@@ -72,9 +96,9 @@ export class LmStubServer {
           }
         ],
         usage: {
-          prompt_tokens: promptLen,
+          prompt_tokens: promptLength,
           completion_tokens: responseText.length,
-          total_tokens: promptLen + responseText.length
+          total_tokens: promptLength + responseText.length
         }
       };
 
@@ -88,34 +112,53 @@ export class LmStubServer {
     });
 
     // ヘルスチェックエンドポイント
-    this.app.get('/health', (req: Request, res: Response) => {
-      res.json({ status: 'ok', timestamp: Date.now() });
+    this.app.get('/health', (_req: Request, res: Response) => {
+      if (options.delay) {
+        setTimeout(() => {
+          res.json({ status: 'ok', timestamp: Date.now() });
+        }, options.delay);
+      } else {
+        res.json({ status: 'ok', timestamp: Date.now() });
+      }
     });
 
     // デフォルトの404ハンドラー
-    this.app.use((req: Request, res: Response) => {
+    this.app.use((_req: Request, res: Response) => {
       res.status(404).json({ error: 'Not Found' });
     });
+  }
+
+  private getServerAddressInfo(server: Server): { port: number } | null {
+    const address = server.address();
+    if (address && typeof address === 'object') {
+      return { port: (address as AddressInfo).port };
+    }
+    if (typeof address === 'number') {
+      return { port: address };
+    }
+    return null;
   }
 
   /**
    * サーバーを起動
    */
   async start(): Promise<number> {
+    if (this.server !== null) {
+      throw new Error('Server is already running');
+    }
     return new Promise((resolve, reject) => {
       try {
-        this.server = this.app.listen(this.port, '127.0.0.1');
-        this.server.once('listening', () => {
-          const address = this.server?.address();
-          if (typeof address === 'object' && address !== null) {
-            this.port = (address as AddressInfo).port;
-          } else if (typeof address === 'number') {
-            this.port = address;
+        const server = this.app.listen(this.port, '127.0.0.1');
+        this.server = server;
+        server.once('listening', () => {
+          const addressInfo = this.getServerAddressInfo(server);
+          if (addressInfo) {
+            this.port = addressInfo.port;
           }
           console.log(`LM Studioスタブサーバーがポート${this.port}で起動しました`);
           resolve(this.port);
         });
-        this.server.once('error', reject);
+        server.once('error', reject);
       } catch (error) {
         reject(error);
       }
@@ -130,9 +173,11 @@ export class LmStubServer {
       if (this.server) {
         this.server.close(() => {
           console.log(`LM Studioスタブサーバーを停止しました`);
+          this.server = null;
           resolve();
         });
       } else {
+        this.server = null;
         resolve();
       }
     });
@@ -156,11 +201,13 @@ export class LmStubServer {
 /**
  * 便利関数：スタブサーバーを起動してクリーンアップ関数を返す
  */
-export async function startLmStub(options?: LmStubOptions): Promise<{ stop: () => Promise<void>, port: number, baseUrl: string }> {
+export async function startLmStub(options?: LmStubOptions): Promise<{ stop: () => Promise<void>; port: number; baseUrl: string }> {
   const server = new LmStubServer(options);
   const port = await server.start();
   return {
-    stop: async () => { await server.stop(); },
+    stop: async () => {
+      await server.stop();
+    },
     port,
     baseUrl: `http://localhost:${port}`
   };

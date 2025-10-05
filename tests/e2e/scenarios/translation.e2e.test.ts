@@ -4,10 +4,84 @@ import { ExtensionContext, launchWithExtension, openPopupPage, createTestPage, c
 import { sendRuntimeMessage, waitForRuntimeMessage } from '../helpers/runtime';
 import { startLmStub } from '../server/lmStub';
 
+interface TranslationResult {
+  ok: boolean;
+  latest?: {
+    originalText: string;
+    translatedText: string;
+    url?: string;
+  };
+}
+
+interface AutoOpenPopupNotice {
+  ok: boolean;
+  notice?: {
+    type: string;
+  };
+}
+
+interface HistoryItem {
+  originalText: string;
+  translatedText: string;
+}
+
+interface HistoryResult {
+  ok: boolean;
+  history?: HistoryItem[];
+}
+
+async function setupTestPageWithText(
+  browser: ExtensionContext['browser'],
+  baseUrl: string,
+  elementId: string,
+  text: string
+): Promise<Page> {
+  const page = await createTestPage(browser, baseUrl);
+  await page.bringToFront();
+  await page.waitForSelector(`#${elementId}`);
+
+  await page.evaluate((id, value) => {
+    const element = document.getElementById(id as string);
+    if (element) {
+      element.textContent = value as string;
+    }
+  }, elementId, text);
+
+  await page.evaluate((id) => {
+    const element = document.getElementById(id as string);
+    if (element) {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+  }, elementId);
+
+  return page;
+}
+
+async function configureTestSettings(
+  controlPage: Page,
+  baseUrl: string,
+  options: { autoOpenPopup: boolean } = { autoOpenPopup: true }
+) {
+  await sendRuntimeMessage(controlPage, {
+    e2e: 'setSettings',
+    settings: {
+      lmStudioUrl: baseUrl,
+      modelName: 'mmnga/plamo-2-translate-gguf',
+      maxTokens: 1000,
+      temperature: 0,
+      autoOpenPopup: options.autoOpenPopup
+    }
+  });
+}
+
 describe('PLaMo Translate拡張機能 - 翻訳機能E2Eテスト', () => {
   let context: ExtensionContext;
   let controlPage: Page;
-  let lmStub: { stop: () => Promise<void>, port: number, baseUrl: string };
+  let lmStub: { stop: () => Promise<void>; port: number; baseUrl: string };
   const extensionPath = process.cwd(); // 現在のディレクトリを拡張機能のパスとして使用
 
   beforeAll(async () => {
@@ -28,14 +102,18 @@ describe('PLaMo Translate拡張機能 - 翻訳機能E2Eテスト', () => {
 
   afterAll(async () => {
     // クリーンアップ
-    try { if (controlPage) await controlPage.close(); } catch {}
+    try {
+      if (controlPage) {
+        await controlPage.close();
+      }
+    } catch (e) {
+      console.error('Failed to close control page:', e);
+    }
     await cleanupBrowser(context);
     if (lmStub) {
       await lmStub.stop();
     }
   }, 30000);
-
-  // グローバルなUnhandledRejectionハンドラはsetupへ移動
 
   const ensureControlPage = async () => {
     if (!controlPage || controlPage.isClosed()) {
@@ -51,38 +129,14 @@ describe('PLaMo Translate拡張機能 - 翻訳機能E2Eテスト', () => {
 
   test('翻訳成功→autoOpenPopup成功の場合、ポップアップが表示されoverlayが表示されない', async () => {
     const translationText = 'これはテスト用の日本語テキストです。';
-    const testPage = await createTestPage(context.browser, lmStub.baseUrl);
-    await testPage.bringToFront();
+    const testPage = await setupTestPageWithText(
+      context.browser,
+      lmStub.baseUrl,
+      'japanese-content',
+      translationText
+    );
 
-    await testPage.waitForSelector('#japanese-content');
-    await testPage.evaluate((text) => {
-      const element = document.getElementById('japanese-content');
-      if (element) {
-        element.textContent = text;
-      }
-    }, translationText);
-
-    await testPage.evaluate(() => {
-      const element = document.getElementById('japanese-content');
-      if (element) {
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        const selection = window.getSelection();
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      }
-    });
-
-    await sendRuntimeMessage(controlPage, {
-      e2e: 'setSettings',
-      settings: {
-      lmStudioUrl: lmStub.baseUrl,
-      modelName: 'mmnga/plamo-2-translate-gguf',
-      maxTokens: 1000,
-      temperature: 0,
-      autoOpenPopup: true
-      }
-    });
+    await configureTestSettings(controlPage, lmStub.baseUrl, { autoOpenPopup: true });
 
     const pageUrl = await testPage.url();
 
@@ -92,19 +146,27 @@ describe('PLaMo Translate拡張機能 - 翻訳機能E2Eテスト', () => {
       url: pageUrl
     });
 
-    const latestResult = await waitForRuntimeMessage<any>(controlPage, { e2e: 'getLatest' }, (resp: any) => {
-      return resp?.ok && resp.latest?.originalText === translationText;
-    }, { description: 'latest translation matching test text' });
+    const latestResult = await waitForRuntimeMessage<TranslationResult>(
+      controlPage,
+      { e2e: 'getLatest' },
+      (resp) => resp?.ok === true && resp.latest?.originalText === translationText,
+      { description: 'latest translation matching test text' }
+    );
 
     expect(latestResult.ok).toBe(true);
-    expect(latestResult.latest).toBeTruthy();
+    if (!latestResult.latest) {
+      throw new Error('最新の翻訳結果が取得できませんでした');
+    }
     expect(latestResult.latest.originalText).toBe(translationText);
     expect(latestResult.latest.translatedText).toBe('これはテスト翻訳結果です。英語から日本語への翻訳が正常に動作しています。');
 
-    await testPage.waitForTimeout(500);
-    const overlayVisible = await testPage.evaluate(() => {
-      return !!document.getElementById('plamo-translate-popup');
-    });
+    // オーバーレイが表示されないことを条件待機で確認
+    await testPage
+      .waitForFunction(() => !document.getElementById('plamo-translate-popup'), { timeout: 1000 })
+      .catch(() => {
+        /* 許容 */
+      });
+    const overlayVisible = await testPage.evaluate(() => !!document.getElementById('plamo-translate-popup'));
     expect(overlayVisible).toBe(false);
 
     await testPage.close();
@@ -112,38 +174,14 @@ describe('PLaMo Translate拡張機能 - 翻訳機能E2Eテスト', () => {
 
   test('autoOpenPopup失敗の場合、overlayがフォールバック表示される', async () => {
     const translationText = 'これはテスト用の英語テキストです。';
-    const testPage = await createTestPage(context.browser, lmStub.baseUrl);
-    await testPage.bringToFront();
+    const testPage = await setupTestPageWithText(
+      context.browser,
+      lmStub.baseUrl,
+      'english-content',
+      translationText
+    );
 
-    await testPage.waitForSelector('#english-content');
-    await testPage.evaluate((text) => {
-      const element = document.getElementById('english-content');
-      if (element) {
-        element.textContent = text;
-      }
-    }, translationText);
-
-    await testPage.evaluate(() => {
-      const element = document.getElementById('english-content');
-      if (element) {
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        const selection = window.getSelection();
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      }
-    });
-
-    await sendRuntimeMessage(controlPage, {
-      e2e: 'setSettings',
-      settings: {
-      lmStudioUrl: lmStub.baseUrl,
-      modelName: 'mmnga/plamo-2-translate-gguf',
-      maxTokens: 1000,
-      temperature: 0,
-      autoOpenPopup: true
-      }
-    });
+    await configureTestSettings(controlPage, lmStub.baseUrl, { autoOpenPopup: true });
 
     await sendRuntimeMessage(controlPage, { e2e: 'simulateOpenPopupError' });
 
@@ -160,12 +198,17 @@ describe('PLaMo Translate拡張機能 - 翻訳機能E2Eテスト', () => {
       return Boolean(popup && popup.classList.contains('plamo-translate-show'));
     }, { timeout: 5000 });
 
-    const noticeResult = await waitForRuntimeMessage<any>(controlPage, { e2e: 'getAutoOpenPopupNotice' }, (resp: any) => {
-      return resp?.ok && resp.notice?.type === 'OPEN_FAILED';
-    }, { description: 'auto open popup failure notice' });
+    const noticeResult = await waitForRuntimeMessage<AutoOpenPopupNotice>(
+      controlPage,
+      { e2e: 'getAutoOpenPopupNotice' },
+      (resp) => resp?.ok === true && resp.notice?.type === 'OPEN_FAILED',
+      { description: 'auto open popup failure notice' }
+    );
 
     expect(noticeResult.ok).toBe(true);
-    expect(noticeResult.notice).toBeTruthy();
+    if (!noticeResult.notice) {
+      throw new Error('autoOpenPopupの通知が取得できませんでした');
+    }
     expect(noticeResult.notice.type).toBe('OPEN_FAILED');
 
     await sendRuntimeMessage(controlPage, { e2e: 'resetOpenPopup' });
@@ -182,39 +225,14 @@ describe('PLaMo Translate拡張機能 - 翻訳機能E2Eテスト', () => {
     ];
 
     for (const text of testTexts) {
-      // 設定をリセット
-      await sendRuntimeMessage(controlPage, {
-        e2e: 'setSettings',
-        settings: {
-          lmStudioUrl: lmStub.baseUrl,
-          modelName: 'mmnga/plamo-2-translate-gguf',
-          maxTokens: 1000,
-          temperature: 0,
-          autoOpenPopup: false
-        }
-      });
+      await configureTestSettings(controlPage, lmStub.baseUrl, { autoOpenPopup: false });
 
-      const testPage = await createTestPage(context.browser, lmStub.baseUrl);
-      await testPage.bringToFront();
-
-      await testPage.waitForSelector('#japanese-content');
-      await testPage.evaluate((value) => {
-        const element = document.getElementById('japanese-content');
-        if (element) {
-          element.textContent = value;
-        }
-      }, text);
-
-      await testPage.evaluate(() => {
-        const element = document.getElementById('japanese-content');
-        if (element) {
-          const range = document.createRange();
-          range.selectNodeContents(element);
-          const selection = window.getSelection();
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-        }
-      });
+      const testPage = await setupTestPageWithText(
+        context.browser,
+        lmStub.baseUrl,
+        'japanese-content',
+        text
+      );
 
       const pageUrl = await testPage.url();
 
@@ -224,24 +242,38 @@ describe('PLaMo Translate拡張機能 - 翻訳機能E2Eテスト', () => {
         url: pageUrl
       });
 
-      await waitForRuntimeMessage<any>(controlPage, { e2e: 'getLatest' }, (resp: any) => {
-        return resp?.ok && resp.latest?.originalText === text;
-      }, { description: `latest translation for "${text}"` });
+      await waitForRuntimeMessage<TranslationResult>(
+        controlPage,
+        { e2e: 'getLatest' },
+        (resp) => resp?.ok === true && resp.latest?.originalText === text,
+        { description: `latest translation for "${text}"` }
+      );
 
       await testPage.close();
     }
 
     // 履歴を取得して確認
-    const historyResult = await waitForRuntimeMessage<any>(controlPage, { e2e: 'getHistory' }, (resp: any) => {
-      return resp?.ok && resp.history?.length === testTexts.length;
-    }, { description: 'history length to reach expected count' });
+    const historyResult = await waitForRuntimeMessage<HistoryResult>(
+      controlPage,
+      { e2e: 'getHistory' },
+      (resp) => resp?.ok === true && (resp.history?.length ?? 0) === testTexts.length,
+      { description: 'history length to reach expected count' }
+    );
 
     expect(historyResult.ok).toBe(true);
-    expect(historyResult.history).toHaveLength(3);
+    const historyItems = historyResult.history;
+    if (!historyItems) {
+      throw new Error('翻訳履歴が取得できませんでした');
+    }
+    expect(historyItems).toHaveLength(3);
 
     // 最新のものが最初にあることを確認
-    expect(historyResult.history[0].originalText).toBe('最後の翻訳確認です。');
-    expect(historyResult.history[1].originalText).toBe('これは二番目のテキストです。');
-    expect(historyResult.history[2].originalText).toBe('最初の翻訳テストです。');
+    const [firstHistory, secondHistory, thirdHistory] = historyItems;
+    if (!firstHistory || !secondHistory || !thirdHistory) {
+      throw new Error('履歴項目の配列が期待した長さではありません');
+    }
+    expect(firstHistory.originalText).toBe('最後の翻訳確認です。');
+    expect(secondHistory.originalText).toBe('これは二番目のテキストです。');
+    expect(thirdHistory.originalText).toBe('最初の翻訳テストです。');
   }, 45000);
 });

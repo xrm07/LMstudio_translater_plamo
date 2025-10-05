@@ -10,14 +10,3 @@ beforeAll(async () => {
     process.env.PUPPETEER_HEADLESS = 'false';
   }
 });
-
-afterAll(async () => {
-  // テスト後のクリーンアップ
-});
-
-// Jestのグローバルエラーハンドリング
-process.on('unhandledRejection', (reason) => {
-  // ここではログのみ。Jestのエラーハンドリングに干渉しない
-  // eslint-disable-next-line no-console
-  console.error('Unhandled Rejection:', reason);
-});

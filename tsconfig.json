@@ -2,14 +2,19 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     // File Layout
-    "rootDir": ".",
+    "rootDir": "./tests",
     "outDir": "./dist",
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
-    "module": "commonjs",
+    "module": "node16",
     "target": "es2020",
-    "types": ["node", "jest"],
+    "types": ["node", "jest", "express"],
+    "typeRoots": ["./tests/types", "./node_modules/@types"],
+    "baseUrl": ".",
+    "paths": {
+      "express": ["tests/types/express"]
+    },
     "lib": ["es2020", "dom"],
     // For nodejs:
     // "lib": ["esnext"],
@@ -36,7 +41,7 @@
     // Recommended Options
     "strict": true,
     "jsx": "react-jsx",
-    "verbatimModuleSyntax": true,
+    "verbatimModuleSyntax": false,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
@@ -44,6 +49,10 @@
 
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node10",
-  }
+    "moduleResolution": "node16"
+  },
+  "include": [
+    "tests/**/*.ts",
+    "tests/**/*.d.ts"
+  ]
 }
