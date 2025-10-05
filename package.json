@@ -1,0 +1,21 @@
+{
+  "name": "plamo-translate-e2e-tests",
+  "version": "1.0.0",
+  "description": "E2E tests for PLaMo Translate Chrome extension",
+  "scripts": {
+    "test:e2e": "jest --config jest.config.cjs --runInBand",
+    "test:e2e:watch": "jest --config jest.config.cjs --runInBand --watch",
+    "test:e2e:debug": "node --inspect-brk node_modules/.bin/jest --config jest.config.cjs --runInBand"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.6.2",
+    "jest": "^30.2.0",
+    "puppeteer": "^21.11.0",
+    "ts-jest": "^29.4.4",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

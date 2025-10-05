@@ -40,7 +40,7 @@
 
 - ユーザーがLM Studioをインストール済み
 - PLaMo Translate (GGUF版) がダウンロード済み
-- LM Studioサーバーが `localhost:1234` で起動中
+- LM Studioサーバーが `localhost` または `127.0.0.1` の任意ポートで起動中
 - Google Chrome 88以降がインストール済み
 
 ---

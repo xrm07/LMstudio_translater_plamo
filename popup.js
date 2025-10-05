@@ -235,7 +235,8 @@ async function testConnection() {
 
   try {
     const response = await chrome.runtime.sendMessage({
-      action: 'testConnection'
+      action: 'testConnection',
+      lmStudioUrl: lmstudioUrlInput.value?.trim() || undefined
     });
 
     if (response.success) {
@@ -608,4 +609,3 @@ autoOpenCheckbox.addEventListener('change', () => {
     checkAutoOpenSupport();
   }
 });
-*** End of File

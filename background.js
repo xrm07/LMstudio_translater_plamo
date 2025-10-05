@@ -96,7 +96,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'testConnection') {
-    testLMStudioConnection()
+    testLMStudioConnection(request && request.lmStudioUrl)
       .then(result => sendResponse(result))
       .catch(error => sendResponse({
         success: false,
@@ -120,65 +120,79 @@ async function handleTranslation(text, tabId, tabUrl = '') {
     // 翻訳実行
     const result = await translateText(text, sourceLang, targetLang);
 
-    if (result.success) {
-      // content scriptに結果を送信
-      chrome.tabs.sendMessage(tabId, {
-        action: 'showTranslation',
-        originalText: text,
-        translatedText: result.translation,
-        sourceLang: sourceLang,
-        targetLang: targetLang,
-        processingTime: result.processingTime
-      });
-
-      const baseEntry = {
-        originalText: text,
-        translatedText: result.translation,
-        sourceLang: sourceLang,
-        targetLang: targetLang,
-        timestamp: Date.now(),
-        url: tabUrl
-      };
-
-      // 翻訳履歴に保存
-      let storedEntry = null;
-      try {
-        storedEntry = await saveToHistory(baseEntry);
-      } catch (historyError) {
-        console.error('Failed to persist translation history:', historyError);
-      }
-
-      // 最新翻訳を保存してからポップアップを表示
-      if (storedEntry) {
-        try {
-          await chrome.storage.local.set({ latestTranslation: storedEntry });
-          // ストレージ書き込み完了後にポップアップを表示
-          await maybeAutoOpenPopup();
-        } catch (latestError) {
-          console.error('Failed to update latestTranslation:', latestError);
-        }
-      } else {
-        console.warn('Latest translation not updated because history entry was unavailable.');
-        // エントリがない場合でもポップアップ表示を試行
-        try {
-          await maybeAutoOpenPopup();
-        } catch (popupError) {
-          if (popupError instanceof Error) {
-            console.warn(
-              `maybeAutoOpenPopup rejection: [${popupError.name}] ${popupError.message}\n${popupError.stack}`
-            );
-          } else {
-            console.warn('maybeAutoOpenPopup rejection:', popupError);
-          }
-        }
-      }
-    } else {
+    if (!result.success) {
       // エラーをcontent scriptに送信
       chrome.tabs.sendMessage(tabId, {
         action: 'showError',
         error: result.error
       });
+      return;
     }
+
+    // 設定取得（autoOpenPopup判定用）
+    const settingsResult = await chrome.storage.local.get(['settings']);
+    const settings = settingsResult.settings
+      ? { ...DEFAULT_SETTINGS, ...settingsResult.settings }
+      : { ...DEFAULT_SETTINGS };
+
+    // 履歴保存と最新翻訳の更新
+    const entry = {
+      originalText: text,
+      translatedText: result.translation,
+      sourceLang: sourceLang,
+      targetLang: targetLang,
+      timestamp: Date.now(),
+      url: tabUrl
+    };
+
+    let storedEntry = null;
+    try {
+      storedEntry = await saveToHistory(entry);
+    } catch (historyError) {
+      console.error('Failed to persist translation history:', historyError);
+    }
+
+    if (storedEntry) {
+      try {
+        await chrome.storage.local.set({ latestTranslation: storedEntry });
+      } catch (latestError) {
+        console.error('Failed to update latestTranslation:', latestError);
+      }
+    }
+
+    // Chrome 127+ で autoOpenPopup が有効かつサポートされていれば、
+    // ポップアップを開き、成功したらオーバーレイ表示は抑止する
+    const canAutoPopup = settings.autoOpenPopup && typeof chrome?.action?.openPopup === 'function';
+    if (canAutoPopup) {
+      try {
+        await chrome.action.openPopup();
+        // 成功: オーバーレイ抑止
+        return;
+      } catch (openErr) {
+        // 失敗時は通知用のストレージ更新のみ行い、フォールバックとしてオーバーレイ表示
+        try {
+          await chrome.storage.local.set({
+            autoOpenPopupNotice: {
+              type: 'OPEN_FAILED',
+              message: openErr?.message || '',
+              timestamp: Date.now()
+            }
+          });
+        } catch (_) {
+          // no-op
+        }
+      }
+    }
+
+    // フォールバック：ページ内オーバーレイ表示
+    chrome.tabs.sendMessage(tabId, {
+      action: 'showTranslation',
+      originalText: text,
+      translatedText: result.translation,
+      sourceLang: sourceLang,
+      targetLang: targetLang,
+      processingTime: result.processingTime
+    });
   } catch (error) {
     console.error('Translation error:', error);
     chrome.tabs.sendMessage(tabId, {
@@ -225,6 +239,9 @@ ${text}
 async function translateText(text, sourceLang, targetLang) {
   const startTime = Date.now();
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
   try {
     // 設定を取得
     const result = await chrome.storage.local.get(['settings']);
@@ -252,7 +269,8 @@ async function translateText(text, sourceLang, targetLang) {
         max_tokens: settings.maxTokens,
         temperature: settings.temperature,
         stop: ['<|plamo:op|>']
-      })
+      }),
+      signal: controller.signal
     });
 
     if (!response.ok) {
@@ -280,10 +298,10 @@ async function translateText(text, sourceLang, targetLang) {
     // エラーメッセージの日本語化
     let errorMessage = '翻訳エラーが発生しました';
 
-    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-      errorMessage = 'LM Studioに接続できません。サーバーが起動しているか確認してください。';
-    } else if (error.message.includes('timeout')) {
+    if (error.name === 'AbortError' || (typeof error.message === 'string' && error.message.includes('aborted'))) {
       errorMessage = 'リクエストがタイムアウトしました。';
+    } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+      errorMessage = 'LM Studioに接続できません。サーバーが起動しているか確認してください。';
     } else if (error.message.includes('500')) {
       errorMessage = 'モデルエラーが発生しました。LM Studioの設定を確認してください。';
     }
@@ -292,6 +310,8 @@ async function translateText(text, sourceLang, targetLang) {
       success: false,
       error: errorMessage
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -299,13 +319,17 @@ async function translateText(text, sourceLang, targetLang) {
  * LM Studio接続テスト
  * @returns {Promise<Object>} - 接続テスト結果
  */
-async function testLMStudioConnection() {
+async function testLMStudioConnection(overrideUrl) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
   try {
     const result = await chrome.storage.local.get(['settings']);
     const settings = result.settings || DEFAULT_SETTINGS;
 
-    const response = await fetch(`${settings.lmStudioUrl}/v1/models`, {
-      method: 'GET'
+    const url = (typeof overrideUrl === 'string' && overrideUrl) ? overrideUrl : settings.lmStudioUrl;
+    const response = await fetch(`${url}/v1/models`, {
+      method: 'GET',
+      signal: controller.signal
     });
 
     if (!response.ok) {
@@ -320,10 +344,13 @@ async function testLMStudioConnection() {
     };
 
   } catch (error) {
+    const message = error.name === 'AbortError' ? 'タイムアウトしました' : error.message;
     return {
       success: false,
-      error: 'LM Studioに接続できません: ' + error.message
+      error: 'LM Studioに接続できません: ' + message
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -436,3 +463,157 @@ function generateUUID() {
     return v.toString(16);
   });
 }
+
+// ============================================================================
+// E2Eテスト専用メッセージフック（本番環境では無効化）
+// ============================================================================
+
+/**
+ * E2Eテスト専用機能の有効化フラグ
+ * 本番環境ではfalseに設定またはビルド時に除外
+ */
+const ENABLE_E2E = true;
+
+/**
+ * E2Eテスト用のメッセージハンドラー
+ * 本番環境では機能しないようガード付き
+ */
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (!ENABLE_E2E || !request || !request.e2e) {
+    return false;
+  }
+
+  (async () => {
+    try {
+      if (request.e2e === 'setSettings') {
+        // テスト用の設定をストレージに保存
+        await chrome.storage.local.set({ settings: request.settings });
+        return sendResponse({ ok: true });
+      }
+
+      if (request.e2e === 'getSettings') {
+        // 現在の設定を取得
+        const result = await chrome.storage.local.get(['settings']);
+        return sendResponse({ ok: true, settings: result.settings });
+      }
+
+      if (request.e2e === 'clearStorage') {
+        // テスト用にストレージをクリア
+        await chrome.storage.local.clear();
+        return sendResponse({ ok: true });
+      }
+
+      if (request.e2e === 'getLatest') {
+        // 最新翻訳を取得
+        const result = await chrome.storage.local.get(['latestTranslation']);
+        return sendResponse({ ok: true, latest: result.latestTranslation || null });
+      }
+
+      if (request.e2e === 'getHistory') {
+        // 翻訳履歴を取得
+        const result = await chrome.storage.local.get(['history']);
+        return sendResponse({ ok: true, history: result.history || [] });
+      }
+
+      if (request.e2e === 'triggerTranslate') {
+        // 翻訳処理をトリガー
+        await handleTranslation(request.text, request.tabId, request.url || '');
+        return sendResponse({ ok: true });
+      }
+
+      if (request.e2e === 'triggerTranslateByUrl') {
+        try {
+          if (!request.url || typeof request.url !== 'string') {
+            return sendResponse({ ok: false, error: 'Missing url for triggerTranslateByUrl' });
+          }
+
+          const candidatePatterns = new Set();
+          candidatePatterns.add(request.url);
+          if (!request.url.includes('*')) {
+            const wildcardPattern = request.url.endsWith('*') ? request.url : `${request.url}*`;
+            candidatePatterns.add(wildcardPattern);
+          }
+
+          let targetTab = null;
+          for (const pattern of candidatePatterns) {
+            const matchedTabs = await chrome.tabs.query({ url: pattern });
+            targetTab = matchedTabs.find((tab) => typeof tab?.id === 'number');
+            if (targetTab) {
+              break;
+            }
+          }
+
+          if (!targetTab) {
+            const allTabs = await chrome.tabs.query({});
+            targetTab = allTabs.find((tab) => {
+              if (!tab?.url) return false;
+              const normalizedTabUrl = tab.url.replace(/\/$/, '');
+              const normalizedRequestUrl = request.url.replace(/\/$/, '');
+              return typeof tab.id === 'number' && (tab.url === request.url || normalizedTabUrl === normalizedRequestUrl || tab.url.startsWith(request.url));
+            }) || null;
+          }
+
+          if (!targetTab || typeof targetTab.id !== 'number') {
+            return sendResponse({ ok: false, error: `No tab found for URL: ${request.url}` });
+          }
+
+          await handleTranslation(request.text, targetTab.id, request.url || targetTab.url || '');
+          return sendResponse({ ok: true, tabId: targetTab.id });
+        } catch (error) {
+          console.error('triggerTranslateByUrl failed:', error);
+          return sendResponse({ ok: false, error: error?.message || 'triggerTranslateByUrl failed' });
+        }
+      }
+
+      if (request.e2e === 'triggerTranslateActive') {
+        // アクティブタブを解決して翻訳をトリガー
+        try {
+          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (!activeTab || !activeTab.id) {
+            return sendResponse({ ok: false, error: 'No active tab' });
+          }
+          await handleTranslation(request.text, activeTab.id, request.url || activeTab.url || '');
+          return sendResponse({ ok: true });
+        } catch (e) {
+          return sendResponse({ ok: false, error: e?.message || 'failed to resolve active tab' });
+        }
+      }
+
+      if (request.e2e === 'simulateOpenPopupError') {
+        // chrome.action.openPopup のエラーをシミュレート
+        chrome.action.openPopup = async () => {
+          throw new Error('Simulated popup open error');
+        };
+        return sendResponse({ ok: true });
+      }
+
+      
+
+      if (request.e2e === 'resetOpenPopup') {
+        // chrome.action.openPopup を元に戻す
+        delete chrome.action.openPopup;
+        return sendResponse({ ok: true });
+      }
+
+      if (request.e2e === 'getAutoOpenPopupNotice') {
+        // autoOpenPopupの通知状態を取得
+        const result = await chrome.storage.local.get(['autoOpenPopupNotice']);
+        return sendResponse({ ok: true, notice: result.autoOpenPopupNotice });
+      }
+
+      if (request.e2e === 'setAutoOpenPopupNotice') {
+        // autoOpenPopupの通知状態を設定
+        await chrome.storage.local.set({ autoOpenPopupNotice: request.notice });
+        return sendResponse({ ok: true });
+      }
+
+      // 未定義のe2eコマンド
+      return sendResponse({ ok: false, error: 'Unknown e2e command' });
+
+    } catch (error) {
+      return sendResponse({ ok: false, error: error.message });
+    }
+  })();
+
+  return true; // 非同期レスポンスを示す
+});

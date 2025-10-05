@@ -11,7 +11,7 @@ This is a Chrome Extension (Manifest V3) that provides privacy-focused Japanese-
 ### Technology Stack
 - **Frontend**: Chrome Extension (Manifest V3, Service Workers)
 - **Translation Model**: PLaMo 2 Translate (9.53B parameters, GGUF format)
-- **Runtime**: LM Studio local server (localhost:1234)
+- **Runtime**: LM Studio local server (localhost / 127.0.0.1)
 - **API**: OpenAI-compatible API via LM Studio
 
 ### Core Components
@@ -69,8 +69,8 @@ translation
 ### Manifest V3 Constraints
 - Service Workers are **non-persistent** (no global variables)
 - Use `chrome.storage` API for state persistence
-- Must declare `host_permissions` for localhost:1234
-- Cannot use `innerHTML` (XSS risk) - use `textContent` only
+- Must declare `host_permissions` for localhost/127.0.0.1 (any port)
+- Prefer not to use `innerHTML` (XSS risk). Build DOM via `createElement`/`textContent`.
 
 ### Language Detection
 ```javascript

@@ -8,12 +8,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'showTranslation') {
     showTranslationPopup(request);
     sendResponse({ success: true });
-  } else if (request.action === 'showError') {
-    showErrorPopup(request.error);
-    sendResponse({ success: true });
-  } else if (request.action === 'getSelectionText') {
-    const selection = window.getSelection();
-    sendResponse({ text: selection ? selection.toString() : '' });
+    return true;
+  }
+    return true;
+  }
+  if (request.action === 'getSelectionText') {
+    const text = (window.getSelection()?.toString() || '').trim();
+    sendResponse({ text });
+    return true;
   }
 });
 
@@ -30,28 +32,68 @@ function showTranslationPopup(data) {
   popup.id = 'plamo-translate-popup';
   popup.className = 'plamo-translate-popup';
 
-  // 内容を構築
-  popup.innerHTML = `
-    <div class="plamo-translate-header">
-      <span class="plamo-translate-title">PLaMo Translate</span>
-      <button class="plamo-translate-close" title="閉じる">×</button>
-    </div>
-    <div class="plamo-translate-body">
-      <div class="plamo-translate-section">
-        <div class="plamo-translate-label">元のテキスト (${data.sourceLang}):</div>
-        <div class="plamo-translate-text plamo-original">${escapeHtml(data.originalText)}</div>
-      </div>
-      <div class="plamo-translate-divider">↓</div>
-      <div class="plamo-translate-section">
-        <div class="plamo-translate-label">翻訳結果 (${data.targetLang}):</div>
-        <div class="plamo-translate-text plamo-translated">${escapeHtml(data.translatedText)}</div>
-      </div>
-      <div class="plamo-translate-footer">
-        <span class="plamo-translate-time">処理時間: ${(data.processingTime / 1000).toFixed(2)}秒</span>
-        <button class="plamo-translate-copy" title="翻訳結果をコピー">📋 コピー</button>
-      </div>
-    </div>
-  `;
+  // ヘッダー
+  const header = document.createElement('div');
+  header.className = 'plamo-translate-header';
+  const title = document.createElement('span');
+  title.className = 'plamo-translate-title';
+  title.textContent = 'PLaMo Translate';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'plamo-translate-close';
+  closeBtn.title = '閉じる';
+  closeBtn.textContent = '×';
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+
+  // 本文
+  const body = document.createElement('div');
+  body.className = 'plamo-translate-body';
+
+  const secOriginal = document.createElement('div');
+  secOriginal.className = 'plamo-translate-section';
+  const labelOriginal = document.createElement('div');
+  labelOriginal.className = 'plamo-translate-label';
+  labelOriginal.textContent = `元のテキスト (${data.sourceLang}):`;
+  const textOriginal = document.createElement('div');
+  textOriginal.className = 'plamo-translate-text plamo-original';
+  textOriginal.textContent = data.originalText;
+  secOriginal.appendChild(labelOriginal);
+  secOriginal.appendChild(textOriginal);
+
+  const divider = document.createElement('div');
+  divider.className = 'plamo-translate-divider';
+  divider.textContent = '↓';
+
+  const secTranslated = document.createElement('div');
+  secTranslated.className = 'plamo-translate-section';
+  const labelTranslated = document.createElement('div');
+  labelTranslated.className = 'plamo-translate-label';
+  labelTranslated.textContent = `翻訳結果 (${data.targetLang}):`;
+  const textTranslated = document.createElement('div');
+  textTranslated.className = 'plamo-translate-text plamo-translated';
+  textTranslated.textContent = data.translatedText;
+  secTranslated.appendChild(labelTranslated);
+  secTranslated.appendChild(textTranslated);
+
+  const footer = document.createElement('div');
+  footer.className = 'plamo-translate-footer';
+  const timeEl = document.createElement('span');
+  timeEl.className = 'plamo-translate-time';
+  timeEl.textContent = `処理時間: ${(data.processingTime / 1000).toFixed(2)}秒`;
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'plamo-translate-copy';
+  copyBtn.title = '翻訳結果をコピー';
+  copyBtn.textContent = '📋 コピー';
+  footer.appendChild(timeEl);
+  footer.appendChild(copyBtn);
+
+  body.appendChild(secOriginal);
+  body.appendChild(divider);
+  body.appendChild(secTranslated);
+  body.appendChild(footer);
+
+  popup.appendChild(header);
+  popup.appendChild(body);
 
   // ページに追加
   document.body.appendChild(popup);
@@ -81,21 +123,31 @@ function showErrorPopup(errorMessage) {
   popup.id = 'plamo-translate-popup';
   popup.className = 'plamo-translate-popup plamo-translate-error';
 
-  popup.innerHTML = `
-    <div class="plamo-translate-header">
-      <span class="plamo-translate-title">⚠️ エラー</span>
-      <button class="plamo-translate-close" title="閉じる">×</button>
-    </div>
-    <div class="plamo-translate-body">
-      <div class="plamo-translate-error-message">${escapeHtml(errorMessage)}</div>
-      <div class="plamo-translate-error-hint">
-        <strong>ヒント:</strong><br>
-        • LM Studioが起動しているか確認してください<br>
-        • モデルがロードされているか確認してください<br>
-        • 拡張機能の設定を確認してください
-      </div>
-    </div>
-  `;
+  const header = document.createElement('div');
+  header.className = 'plamo-translate-header';
+  const title = document.createElement('span');
+  title.className = 'plamo-translate-title';
+  title.textContent = '⚠️ エラー';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'plamo-translate-close';
+  closeBtn.title = '閉じる';
+  closeBtn.textContent = '×';
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+
+  const body = document.createElement('div');
+  body.className = 'plamo-translate-body';
+  const msg = document.createElement('div');
+  msg.className = 'plamo-translate-error-message';
+  msg.textContent = errorMessage;
+  const hint = document.createElement('div');
+  hint.className = 'plamo-translate-error-hint';
+  hint.innerHTML = '<strong>ヒント:</strong><br>• LM Studioが起動しているか確認してください<br>• モデルがロードされているか確認してください<br>• 拡張機能の設定を確認してください';
+  body.appendChild(msg);
+  body.appendChild(hint);
+
+  popup.appendChild(header);
+  popup.appendChild(body);
 
   document.body.appendChild(popup);
   positionPopup(popup);
