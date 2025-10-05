@@ -16,24 +16,13 @@
 
     <!-- タブナビゲーション -->
     <div class="popup-tabs">
-      <button class="popup-tab active" data-tab="latest">🆕 最新翻訳</button>
-      <button class="popup-tab" data-tab="settings">⚙️ 設定</button>
+      <button class="popup-tab active" data-tab="settings">⚙️ 設定</button>
       <button class="popup-tab" data-tab="history">📜 履歴</button>
       <button class="popup-tab" data-tab="about">ℹ️ について</button>
     </div>
 
-    <!-- 最新翻訳タブ -->
-    <div class="popup-content" id="latest-tab">
-      <div id="latest-translation" class="latest-container">
-        <div class="latest-empty">まだ翻訳が実行されていません。</div>
-      </div>
-      <div class="latest-footer">
-        <button class="btn btn-secondary" data-tab-target="history">📜 履歴を開く</button>
-      </div>
-    </div>
-
     <!-- 設定タブ -->
-    <div class="popup-content hidden" id="settings-tab">
+    <div class="popup-content" id="settings-tab">
       <div class="form-group">
         <label for="lmstudio-url" class="form-label">LM Studio URL</label>
         <input
@@ -52,9 +41,7 @@
           id="model-name"
           class="form-input"
           placeholder="mmnga/plamo-2-translate-gguf"
-          list="model-options"
         >
-        <datalist id="model-options"></datalist>
         <div class="form-hint">使用する翻訳モデルの識別子</div>
       </div>
 
@@ -69,15 +56,6 @@
           placeholder="1000"
         >
         <div class="form-hint">翻訳結果の最大長（100〜4096）</div>
-      </div>
-
-      <div class="form-group form-group-inline">
-        <label class="form-checkbox">
-          <input type="checkbox" id="auto-open-popup" class="form-checkbox-input">
-          <span class="form-checkbox-label">翻訳完了時にポップアップを自動で表示する</span>
-        </label>
-        <p id="auto-open-hint" class="form-hint">ポップアップが表示されない場合は、拡張機能アイコンをツールバーへピン留めしてください。</p>
-        <div id="auto-open-warning" class="auto-open-warning hidden"></div>
       </div>
 
       <div class="button-group">
