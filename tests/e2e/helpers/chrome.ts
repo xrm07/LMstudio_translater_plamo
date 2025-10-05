@@ -12,11 +12,17 @@ export interface ExtensionContext {
  * @returns ブラウザ、拡張ID、サービスワーカー
  */
 export async function launchWithExtension(extensionPath: string): Promise<ExtensionContext> {
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
+
   const browser = await puppeteer.launch({
     headless: false,
+    executablePath,
     args: [
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
+      // CI 安定化用フラグ
+      '--no-sandbox',
+      '--disable-gpu',
       // 開発モード用の追加フラグ
       '--disable-web-security',
       '--disable-features=VizDisplayCompositor'
