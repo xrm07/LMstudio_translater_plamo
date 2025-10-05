@@ -12,6 +12,9 @@ const DEFAULT_SETTINGS = {
   autoOpenPopup: true
 };
 
+// 定数
+const MAX_HISTORY_ENTRIES = 50;
+
 // 拡張機能インストール時の初期化
 chrome.runtime.onInstalled.addListener(() => {
   // デフォルト設定を保存（既存ユーザーも不足しているキーを補完）
@@ -145,27 +148,30 @@ async function handleTranslation(text, tabId, tabUrl = '') {
         console.error('Failed to persist translation history:', historyError);
       }
 
-      // 最新翻訳を保存
+      // 最新翻訳を保存してからポップアップを表示
       if (storedEntry) {
         try {
           await chrome.storage.local.set({ latestTranslation: storedEntry });
+          // ストレージ書き込み完了後にポップアップを表示
+          await maybeAutoOpenPopup();
         } catch (latestError) {
           console.error('Failed to update latestTranslation:', latestError);
         }
       } else {
         console.warn('Latest translation not updated because history entry was unavailable.');
-      }
-
-      // オプションに応じてポップアップを自動表示
-      maybeAutoOpenPopup().catch((popupError) => {
-        if (popupError instanceof Error) {
-          console.warn(
-            `maybeAutoOpenPopup rejection: [${popupError.name}] ${popupError.message}\n${popupError.stack}`
-          );
-        } else {
-          console.warn('maybeAutoOpenPopup rejection:', popupError);
+        // エントリがない場合でもポップアップ表示を試行
+        try {
+          await maybeAutoOpenPopup();
+        } catch (popupError) {
+          if (popupError instanceof Error) {
+            console.warn(
+              `maybeAutoOpenPopup rejection: [${popupError.name}] ${popupError.message}\n${popupError.stack}`
+            );
+          } else {
+            console.warn('maybeAutoOpenPopup rejection:', popupError);
+          }
         }
-      });
+      }
     } else {
       // エラーをcontent scriptに送信
       chrome.tabs.sendMessage(tabId, {
@@ -222,7 +228,9 @@ async function translateText(text, sourceLang, targetLang) {
   try {
     // 設定を取得
     const result = await chrome.storage.local.get(['settings']);
-    const settings = result.settings || DEFAULT_SETTINGS;
+    const settings = result.settings 
+      ? { ...DEFAULT_SETTINGS, ...result.settings }
+      : { ...DEFAULT_SETTINGS };
 
     // プロンプト構築
     const prompt = buildTranslationPrompt(text, sourceLang, targetLang);
@@ -252,7 +260,12 @@ async function translateText(text, sourceLang, targetLang) {
     }
 
     const data = await response.json();
-    const translation = data.choices[0].message.content.trim();
+    const translation = data?.choices?.[0]?.message?.content?.trim();
+    
+    if (!translation) {
+      throw new Error('Invalid response from translation API');
+    }
+    
     const processingTime = Date.now() - startTime;
 
     return {
@@ -328,9 +341,9 @@ async function saveToHistory(entry) {
 
     history.unshift(storedEntry);
 
-    // 最大50件に制限
-    if (history.length > 50) {
-      history = history.slice(0, 50);
+    // 最大件数に制限
+    if (history.length > MAX_HISTORY_ENTRIES) {
+      history = history.slice(0, MAX_HISTORY_ENTRIES);
     }
 
     await chrome.storage.local.set({ history: history });

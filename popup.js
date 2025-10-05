@@ -24,7 +24,8 @@ const historyList = document.getElementById('history-list');
 const latestContainer = document.getElementById('latest-translation');
 const tabTargetButtons = document.querySelectorAll('[data-tab-target]');
 
-const POPUP_DEFAULT_SETTINGS = {
+// Default settings (matches DEFAULT_SETTINGS in background.js)
+const DEFAULT_SETTINGS = {
   lmStudioUrl: 'http://localhost:1234',
   modelName: 'mmnga/plamo-2-translate-gguf',
   maxTokens: 1000,
@@ -32,9 +33,41 @@ const POPUP_DEFAULT_SETTINGS = {
   autoOpenPopup: true
 };
 
+// Validation constants
+const MIN_TOKENS = 100;
+const MAX_TOKENS = 4096;
+
 let availableModels = [];
 let latestTranslation = null;
 let historyCache = [];
+
+/**
+ * URLリンクを安全に作成するヘルパー関数
+ * @param {string} url - 対象URL
+ * @returns {Object} - {link: HTMLElement, isValid: boolean}
+ */
+function createSafeUrlLink(url) {
+  const link = document.createElement('a');
+  link.target = '_blank';
+  link.rel = 'noreferrer noopener';
+  
+  let hostname = '';
+  let isValid = false;
+  
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+      link.href = url;
+      hostname = parsedUrl.hostname;
+      isValid = true;
+    }
+  } catch (error) {
+    // Invalid URL - link will not have href
+  }
+  
+  link.textContent = isValid ? `ページを開く (${hostname})` : 'ページを開く';
+  return { link, isValid };
+}
 
 // 初期化
 document.addEventListener('DOMContentLoaded', () => {
@@ -102,7 +135,7 @@ function initStorageListeners() {
     }
 
     if (changes.settings && changes.settings.newValue) {
-      const merged = { ...POPUP_DEFAULT_SETTINGS, ...changes.settings.newValue };
+      const merged = { ...DEFAULT_SETTINGS, ...changes.settings.newValue };
       autoOpenCheckbox.checked = merged.autoOpenPopup !== false;
     }
   });
@@ -146,8 +179,8 @@ function switchTab(tabName) {
 function loadSettings() {
   chrome.storage.local.get(['settings', 'availableModels'], (result) => {
     const settings = result.settings
-      ? { ...POPUP_DEFAULT_SETTINGS, ...result.settings }
-      : { ...POPUP_DEFAULT_SETTINGS };
+      ? { ...DEFAULT_SETTINGS, ...result.settings }
+      : { ...DEFAULT_SETTINGS };
 
     availableModels = Array.isArray(result.availableModels) ? result.availableModels : [];
     renderModelOptions(availableModels);
@@ -182,8 +215,8 @@ function saveSettings() {
     return;
   }
 
-  if (Number.isNaN(settings.maxTokens) || settings.maxTokens < 100 || settings.maxTokens > 4096) {
-    showStatus('最大トークン数は100〜4096の範囲で指定してください', 'error');
+  if (Number.isNaN(settings.maxTokens) || settings.maxTokens < MIN_TOKENS || settings.maxTokens > MAX_TOKENS) {
+    showStatus(`最大トークン数は${MIN_TOKENS}〜${MAX_TOKENS}の範囲で指定してください`, 'error');
     return;
   }
 
@@ -299,18 +332,7 @@ function renderLatestTranslation(entry) {
     const urlWrapper = document.createElement('div');
     urlWrapper.className = 'latest-url';
 
-    const link = document.createElement('a');
-    link.href = entry.url;
-    link.target = '_blank';
-    link.rel = 'noreferrer noopener';
-
-    try {
-      const { hostname } = new URL(entry.url);
-      link.textContent = `ページを開く (${hostname})`;
-    } catch (error) {
-      link.textContent = 'ページを開く';
-    }
-
+    const { link } = createSafeUrlLink(entry.url);
     urlWrapper.appendChild(link);
     card.appendChild(urlWrapper);
   }
@@ -337,7 +359,11 @@ function renderHistory(history) {
 
   if (historyList) {
     if (history.length === 0) {
-      historyList.innerHTML = '<div class="history-empty">翻訳履歴はありません</div>';
+      historyList.textContent = '';
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'history-empty';
+      emptyDiv.textContent = '翻訳履歴はありません';
+      historyList.appendChild(emptyDiv);
       return;
     }
 
@@ -386,18 +412,7 @@ function renderHistory(history) {
         const urlWrapper = document.createElement('div');
         urlWrapper.className = 'history-url';
 
-        const link = document.createElement('a');
-        link.href = entry.url;
-        link.target = '_blank';
-        link.rel = 'noreferrer noopener';
-
-        try {
-          const { hostname } = new URL(entry.url);
-          link.textContent = `ページを開く (${hostname})`;
-        } catch (error) {
-          link.textContent = 'ページを開く';
-        }
-
+        const { link } = createSafeUrlLink(entry.url);
         urlWrapper.appendChild(link);
         historyItem.appendChild(urlWrapper);
       }

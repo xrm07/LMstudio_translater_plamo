@@ -11,6 +11,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === 'showError') {
     showErrorPopup(request.error);
     sendResponse({ success: true });
+  } else if (request.action === 'getSelectionText') {
+    const selection = window.getSelection();
+    sendResponse({ text: selection ? selection.toString() : '' });
   }
 });
 
