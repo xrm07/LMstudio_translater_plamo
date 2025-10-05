@@ -11,8 +11,13 @@ const DEFAULT_SETTINGS = {
   lmStudioUrl: 'http://localhost:1234',
   modelName: 'mmnga/plamo-2-translate-gguf',
   maxTokens: 1000,
-  temperature: 0
+  temperature: 0,
+  autoOpenPopup: false
 };
+
+// E2Eサポート用のキー
+const E2E_OPEN_POPUP_FAILURE_FLAG = 'e2eOpenPopupFailed';
+const E2E_AUTO_OPEN_POPUP_NOTICE = 'e2eAutoOpenPopupNotice';
 
 // 拡張機能インストール時の初期化
 chrome.runtime.onInstalled.addListener((details) => {
@@ -105,6 +110,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           error: error.message
         });
       });
+    return true;
+  }
+
+  // E2Eテスト用のデバッグフック
+  if (typeof request.e2e === 'string') {
+    handleE2EMessage(request, sender, sendResponse);
     return true;
   }
 });
@@ -316,6 +327,121 @@ async function translateText(text, sourceLang, targetLang) {
       success: false,
       error: errorMessage
     };
+  }
+}
+
+/**
+ * E2Eテストメッセージを処理
+ */
+async function handleE2EMessage(request, sender, sendResponse) {
+  try {
+    switch (request.e2e) {
+      case 'clearStorage': {
+        await chrome.storage.local.set({ history: [], latest: null, [E2E_OPEN_POPUP_FAILURE_FLAG]: false, [E2E_AUTO_OPEN_POPUP_NOTICE]: null });
+        sendResponse({ ok: true });
+        return;
+      }
+      case 'setSettings': {
+        const current = await chrome.storage.local.get(['settings']);
+        const next = { ...DEFAULT_SETTINGS, ...(current.settings || {}), ...(request.settings || {}) };
+        await chrome.storage.local.set({ settings: next });
+        sendResponse({ ok: true });
+        return;
+      }
+      case 'getSettings': {
+        const result = await chrome.storage.local.get(['settings']);
+        sendResponse({ ok: true, settings: result.settings || DEFAULT_SETTINGS });
+        return;
+      }
+      case 'getHistory': {
+        const result = await chrome.storage.local.get(['history']);
+        sendResponse({ ok: true, history: result.history || [] });
+        return;
+      }
+      case 'getLatest': {
+        const result = await chrome.storage.local.get(['latest']);
+        sendResponse({ ok: true, latest: result.latest || null });
+        return;
+      }
+      case 'simulateOpenPopupError': {
+        await chrome.storage.local.set({ [E2E_OPEN_POPUP_FAILURE_FLAG]: true, [E2E_AUTO_OPEN_POPUP_NOTICE]: { type: 'OPEN_FAILED', at: Date.now() } });
+        sendResponse({ ok: true });
+        return;
+      }
+      case 'resetOpenPopup': {
+        await chrome.storage.local.set({ [E2E_OPEN_POPUP_FAILURE_FLAG]: false, [E2E_AUTO_OPEN_POPUP_NOTICE]: null });
+        sendResponse({ ok: true });
+        return;
+      }
+      case 'getAutoOpenPopupNotice': {
+        const { [E2E_AUTO_OPEN_POPUP_NOTICE]: notice } = await chrome.storage.local.get([E2E_AUTO_OPEN_POPUP_NOTICE]);
+        sendResponse({ ok: true, notice: notice || null });
+        return;
+      }
+      case 'triggerTranslateByUrl': {
+        const text = request.text || '';
+        const pageUrl = request.url || '';
+        const sourceLang = detectLanguage(text);
+        const targetLang = sourceLang === 'Japanese' ? 'English' : 'Japanese';
+
+        const result = await translateText(text, sourceLang, targetLang);
+        if (!result.success) {
+          sendResponse({ ok: false, error: result.error });
+          return;
+        }
+
+        // 最新翻訳を保存
+        const latest = {
+          id: generateUUID(),
+          originalText: text,
+          translatedText: result.translation,
+          sourceLang,
+          targetLang,
+          timestamp: Date.now(),
+          url: pageUrl
+        };
+        await chrome.storage.local.set({ latest });
+
+        // 履歴にも保存
+        await saveToHistory(latest);
+
+        // autoOpenPopupの挙動：成功時はオーバーレイを表示せず、失敗シミュレーション時のみフォールバック
+        const { settings } = await chrome.storage.local.get(['settings']);
+        const autoOpenPopup = Boolean((settings || DEFAULT_SETTINGS).autoOpenPopup);
+        const store = await chrome.storage.local.get([E2E_OPEN_POPUP_FAILURE_FLAG]);
+        const shouldFallbackOverlay = Boolean(store[E2E_OPEN_POPUP_FAILURE_FLAG]);
+
+        if (!autoOpenPopup || shouldFallbackOverlay) {
+          try {
+            // URLで対象タブを検索してオーバーレイを表示
+            const tabs = await chrome.tabs.query({ url: pageUrl });
+            const tabId = tabs?.[0]?.id ?? sender.tab?.id;
+            if (typeof tabId === 'number') {
+              chrome.tabs.sendMessage(tabId, {
+                action: 'showTranslation',
+                originalText: text,
+                translatedText: result.translation,
+                sourceLang,
+                targetLang,
+                processingTime: 0
+              });
+            }
+          } catch (e) {
+            // タブが取得できない場合は何もしない
+          }
+        }
+
+        sendResponse({ ok: true, latest });
+        return;
+      }
+      default: {
+        sendResponse({ ok: false, error: 'Unknown e2e command' });
+        return;
+      }
+    }
+  } catch (e) {
+    const message = (e && typeof e === 'object' && 'message' in e) ? e.message : String(e);
+    sendResponse({ ok: false, error: message });
   }
 }
 
