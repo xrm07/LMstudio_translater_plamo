@@ -3,14 +3,53 @@
  * Webページ上での翻訳結果表示を管理
  */
 
+// ログユーティリティ関数
+const LogLevel = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3
+};
+
+function log(level, message, data = null) {
+  const timestamp = new Date().toISOString();
+  const levelName = Object.keys(LogLevel)[level];
+  const logMessage = `[${timestamp}] [${levelName}] ContentScript: ${message}`;
+
+  if (data) {
+    console.log(logMessage, data);
+  } else {
+    console.log(logMessage);
+  }
+}
+
 // メッセージリスナー（background scriptからの通知）
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  log(LogLevel.DEBUG, 'メッセージを受信しました', {
+    action: request.action,
+    senderTabId: sender.tab?.id
+  });
+
   if (request.action === 'showTranslation') {
+    log(LogLevel.INFO, '翻訳結果を表示します', {
+      sourceLang: request.sourceLang,
+      targetLang: request.targetLang,
+      processingTime: request.processingTime
+    });
+
     showTranslationPopup(request);
     sendResponse({ success: true });
   } else if (request.action === 'showError') {
+    log(LogLevel.WARN, 'エラーを表示します', {
+      error: request.error
+    });
+
     showErrorPopup(request.error);
     sendResponse({ success: true });
+  } else {
+    log(LogLevel.WARN, '未知のアクションを受信しました', {
+      action: request.action
+    });
   }
 });
 
@@ -19,6 +58,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  * @param {Object} data - 翻訳データ
  */
 function showTranslationPopup(data) {
+  log(LogLevel.DEBUG, '翻訳ポップアップを作成します', {
+    sourceLang: data.sourceLang,
+    targetLang: data.targetLang,
+    textLength: data.originalText?.length
+  });
+
   // 既存のポップアップを削除
   removeExistingPopup();
 
@@ -161,6 +206,10 @@ function attachPopupEventListeners(popup, translatedText) {
   // コピーボタン
   const copyButton = popup.querySelector('.plamo-translate-copy');
   copyButton.addEventListener('click', () => {
+    log(LogLevel.DEBUG, '翻訳結果をコピーします', {
+      textLength: translatedText.length
+    });
+
     copyToClipboard(translatedText);
     copyButton.textContent = '✓ コピーしました';
     setTimeout(() => {
@@ -220,13 +269,20 @@ function removeExistingPopup() {
  * @param {string} text - コピーするテキスト
  */
 function copyToClipboard(text) {
+  log(LogLevel.DEBUG, 'クリップボードにコピーします', {
+    textLength: text.length
+  });
+
   // navigator.clipboard APIを使用
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).catch(err => {
-      console.error('Failed to copy text:', err);
+      log(LogLevel.ERROR, 'クリップボードコピー失敗（navigator.clipboard）', {
+        error: err.message
+      });
       fallbackCopyToClipboard(text);
     });
   } else {
+    log(LogLevel.DEBUG, 'フォールバックコピー方法を使用します');
     fallbackCopyToClipboard(text);
   }
 }
@@ -236,6 +292,8 @@ function copyToClipboard(text) {
  * @param {string} text - コピーするテキスト
  */
 function fallbackCopyToClipboard(text) {
+  log(LogLevel.DEBUG, 'フォールバッククリップボードコピー実行');
+
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.style.position = 'fixed';
@@ -244,9 +302,14 @@ function fallbackCopyToClipboard(text) {
   textarea.select();
 
   try {
-    document.execCommand('copy');
+    const success = document.execCommand('copy');
+    log(LogLevel.INFO, 'フォールバッククリップボードコピー成功', {
+      success: success
+    });
   } catch (err) {
-    console.error('Failed to copy text:', err);
+    log(LogLevel.ERROR, 'フォールバッククリップボードコピー失敗', {
+      error: err.message
+    });
   }
 
   document.body.removeChild(textarea);
