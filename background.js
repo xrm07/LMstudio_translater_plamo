@@ -4,6 +4,7 @@
  */
 
 import { log, LogLevel } from './logger.js';
+import { detectLanguage, buildTranslationPrompt, generateUUID } from './utils.js';
 
 // デフォルト設定
 const DEFAULT_SETTINGS = {
@@ -192,11 +193,7 @@ async function handleTranslation(text, tabId) {
  * @param {string} text - 検出対象テキスト
  * @returns {string} - 'Japanese' または 'English'
  */
-function detectLanguage(text) {
-  // 日本語文字（ひらがな、カタカナ、漢字）の検出
-  const japaneseRegex = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
-  return japaneseRegex.test(text) ? 'Japanese' : 'English';
-}
+// detectLanguage moved to utils.js
 
 /**
  * PLaMo Translate用のプロンプトを構築
@@ -205,14 +202,7 @@ function detectLanguage(text) {
  * @param {string} targetLang - 翻訳先言語
  * @returns {string} - PLaMo形式のプロンプト
  */
-function buildTranslationPrompt(text, sourceLang, targetLang) {
-  return `<|plamo:op|>dataset
-translation
-
-<|plamo:op|>input lang=${sourceLang}
-${text}
-<|plamo:op|>output lang=${targetLang}`;
-}
+// buildTranslationPrompt moved to utils.js
 
 /**
  * 翻訳実行
@@ -426,10 +416,4 @@ async function saveToHistory(entry) {
  * UUID生成
  * @returns {string} - UUID
  */
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
+// generateUUID moved to utils.js

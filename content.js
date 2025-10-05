@@ -54,28 +54,71 @@ function showTranslationPopup(data) {
   popup.id = 'plamo-translate-popup';
   popup.className = 'plamo-translate-popup';
 
-  // 内容を構築
-  popup.innerHTML = `
-    <div class="plamo-translate-header">
-      <span class="plamo-translate-title">PLaMo Translate</span>
-      <button class="plamo-translate-close" title="閉じる">×</button>
-    </div>
-    <div class="plamo-translate-body">
-      <div class="plamo-translate-section">
-        <div class="plamo-translate-label">元のテキスト (${data.sourceLang}):</div>
-        <div class="plamo-translate-text plamo-original">${escapeHtml(data.originalText)}</div>
-      </div>
-      <div class="plamo-translate-divider">↓</div>
-      <div class="plamo-translate-section">
-        <div class="plamo-translate-label">翻訳結果 (${data.targetLang}):</div>
-        <div class="plamo-translate-text plamo-translated">${escapeHtml(data.translatedText)}</div>
-      </div>
-      <div class="plamo-translate-footer">
-        <span class="plamo-translate-time">処理時間: ${(data.processingTime / 1000).toFixed(2)}秒</span>
-        <button class="plamo-translate-copy" title="翻訳結果をコピー">📋 コピー</button>
-      </div>
-    </div>
-  `;
+  // ヘッダー
+  const header = document.createElement('div');
+  header.className = 'plamo-translate-header';
+
+  const title = document.createElement('span');
+  title.className = 'plamo-translate-title';
+  title.textContent = 'PLaMo Translate';
+
+  const closeButton = document.createElement('button');
+  closeButton.className = 'plamo-translate-close';
+  closeButton.title = '閉じる';
+  closeButton.textContent = '×';
+
+  header.appendChild(title);
+  header.appendChild(closeButton);
+
+  // ボディ
+  const body = document.createElement('div');
+  body.className = 'plamo-translate-body';
+
+  const sectionOriginal = document.createElement('div');
+  sectionOriginal.className = 'plamo-translate-section';
+  const labelOriginal = document.createElement('div');
+  labelOriginal.className = 'plamo-translate-label';
+  labelOriginal.textContent = `元のテキスト (${data.sourceLang}):`;
+  const textOriginal = document.createElement('div');
+  textOriginal.className = 'plamo-translate-text plamo-original';
+  textOriginal.textContent = data.originalText;
+  sectionOriginal.appendChild(labelOriginal);
+  sectionOriginal.appendChild(textOriginal);
+
+  const divider = document.createElement('div');
+  divider.className = 'plamo-translate-divider';
+  divider.textContent = '↓';
+
+  const sectionTranslated = document.createElement('div');
+  sectionTranslated.className = 'plamo-translate-section';
+  const labelTranslated = document.createElement('div');
+  labelTranslated.className = 'plamo-translate-label';
+  labelTranslated.textContent = `翻訳結果 (${data.targetLang}):`;
+  const textTranslated = document.createElement('div');
+  textTranslated.className = 'plamo-translate-text plamo-translated';
+  textTranslated.textContent = data.translatedText;
+  sectionTranslated.appendChild(labelTranslated);
+  sectionTranslated.appendChild(textTranslated);
+
+  const footer = document.createElement('div');
+  footer.className = 'plamo-translate-footer';
+  const time = document.createElement('span');
+  time.className = 'plamo-translate-time';
+  time.textContent = `処理時間: ${(data.processingTime / 1000).toFixed(2)}秒`;
+  const copyButton = document.createElement('button');
+  copyButton.className = 'plamo-translate-copy';
+  copyButton.title = '翻訳結果をコピー';
+  copyButton.textContent = '📋 コピー';
+  footer.appendChild(time);
+  footer.appendChild(copyButton);
+
+  body.appendChild(sectionOriginal);
+  body.appendChild(divider);
+  body.appendChild(sectionTranslated);
+  body.appendChild(footer);
+
+  popup.appendChild(header);
+  popup.appendChild(body);
 
   // ページに追加
   document.body.appendChild(popup);
@@ -105,27 +148,51 @@ function showErrorPopup(errorMessage) {
   popup.id = 'plamo-translate-popup';
   popup.className = 'plamo-translate-popup plamo-translate-error';
 
-  popup.innerHTML = `
-    <div class="plamo-translate-header">
-      <span class="plamo-translate-title">⚠️ エラー</span>
-      <button class="plamo-translate-close" title="閉じる">×</button>
-    </div>
-    <div class="plamo-translate-body">
-      <div class="plamo-translate-error-message">${escapeHtml(errorMessage)}</div>
-      <div class="plamo-translate-error-hint">
-        <strong>ヒント:</strong><br>
-        • LM Studioが起動しているか確認してください<br>
-        • モデルがロードされているか確認してください<br>
-        • 拡張機能の設定を確認してください
-      </div>
-    </div>
-  `;
+  // ヘッダー
+  const header = document.createElement('div');
+  header.className = 'plamo-translate-header';
+  const title = document.createElement('span');
+  title.className = 'plamo-translate-title';
+  title.textContent = '⚠️ エラー';
+  const closeButton = document.createElement('button');
+  closeButton.className = 'plamo-translate-close';
+  closeButton.title = '閉じる';
+  closeButton.textContent = '×';
+  header.appendChild(title);
+  header.appendChild(closeButton);
+
+  // ボディ
+  const body = document.createElement('div');
+  body.className = 'plamo-translate-body';
+  const errorDiv = document.createElement('div');
+  errorDiv.className = 'plamo-translate-error-message';
+  errorDiv.textContent = errorMessage;
+  const hint = document.createElement('div');
+  hint.className = 'plamo-translate-error-hint';
+  const strong = document.createElement('strong');
+  strong.textContent = 'ヒント:';
+  const list = document.createElement('ul');
+  const li1 = document.createElement('li');
+  li1.textContent = 'LM Studioが起動しているか確認してください';
+  const li2 = document.createElement('li');
+  li2.textContent = 'モデルがロードされているか確認してください';
+  const li3 = document.createElement('li');
+  li3.textContent = '拡張機能の設定を確認してください';
+  list.appendChild(li1);
+  list.appendChild(li2);
+  list.appendChild(li3);
+  hint.appendChild(strong);
+  hint.appendChild(list);
+  body.appendChild(errorDiv);
+  body.appendChild(hint);
+
+  popup.appendChild(header);
+  popup.appendChild(body);
 
   document.body.appendChild(popup);
   positionPopup(popup);
 
   // イベントリスナーを追加
-  const closeButton = popup.querySelector('.plamo-translate-close');
   closeButton.addEventListener('click', () => removeExistingPopup());
 
   // 外側クリックで閉じる
@@ -303,6 +370,7 @@ function fallbackCopyToClipboard(text) {
  * @returns {string} - エスケープ済みテキスト
  */
 function escapeHtml(text) {
+  // 安全なHTMLエスケープ: textContentを設定してinnerHTMLを取得
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
