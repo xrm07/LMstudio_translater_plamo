@@ -3,6 +3,8 @@
  * 拡張機能のポップアップUIロジック
  */
 
+import { log, LogLevel } from './logger.js';
+
 // DOM要素の取得
 const tabs = document.querySelectorAll('.popup-tab');
 const tabContents = document.querySelectorAll('.popup-content');
@@ -20,9 +22,13 @@ const historyList = document.getElementById('history-list');
 
 // 初期化
 document.addEventListener('DOMContentLoaded', () => {
+  log(LogLevel.INFO, 'ポップアップ初期化開始', null, 'PopupScript');
+
   loadSettings();
   loadHistory();
   initTabs();
+
+  log(LogLevel.INFO, 'ポップアップ初期化完了', null, 'PopupScript');
 });
 
 /**
@@ -70,6 +76,8 @@ function switchTab(tabName) {
  * 設定を読み込み
  */
 function loadSettings() {
+  log(LogLevel.DEBUG, '設定を読み込みます', null, 'PopupScript');
+
   chrome.storage.local.get(['settings'], (result) => {
     const settings = result.settings || {
       lmStudioUrl: 'http://localhost:1234',
@@ -77,6 +85,12 @@ function loadSettings() {
       maxTokens: 1000,
       temperature: 0
     };
+
+    log(LogLevel.DEBUG, '設定を読み込みました', {
+      lmStudioUrl: settings.lmStudioUrl,
+      modelName: settings.modelName,
+      maxTokens: settings.maxTokens
+    }, 'PopupScript');
 
     lmstudioUrlInput.value = settings.lmStudioUrl;
     modelNameInput.value = settings.modelName;
@@ -88,6 +102,8 @@ function loadSettings() {
  * 設定を保存
  */
 function saveSettings() {
+  log(LogLevel.DEBUG, '設定を保存します', null, 'PopupScript');
+
   const settings = {
     lmStudioUrl: lmstudioUrlInput.value.trim(),
     modelName: modelNameInput.value.trim(),
@@ -95,24 +111,36 @@ function saveSettings() {
     temperature: 0
   };
 
+  log(LogLevel.DEBUG, '設定値', {
+    lmStudioUrl: settings.lmStudioUrl,
+    modelName: settings.modelName,
+    maxTokens: settings.maxTokens
+  }, 'PopupScript');
+
   // バリデーション
   if (!settings.lmStudioUrl) {
+    log(LogLevel.WARN, 'バリデーションエラー: LM Studio URLが空', null, 'PopupScript');
     showStatus('LM Studio URLを入力してください', 'error');
     return;
   }
 
   if (!settings.modelName) {
+    log(LogLevel.WARN, 'バリデーションエラー: モデル名が空', null, 'PopupScript');
     showStatus('モデル名を入力してください', 'error');
     return;
   }
 
   if (settings.maxTokens < 100 || settings.maxTokens > 4096) {
+    log(LogLevel.WARN, 'バリデーションエラー: 最大トークン数の範囲外', {
+      maxTokens: settings.maxTokens
+    }, 'PopupScript');
     showStatus('最大トークン数は100〜4096の範囲で指定してください', 'error');
     return;
   }
 
   // 保存
   chrome.storage.local.set({ settings }, () => {
+    log(LogLevel.INFO, '設定を保存しました', settings, 'PopupScript');
     showStatus('✅ 設定を保存しました', 'success');
   });
 }
@@ -121,24 +149,42 @@ function saveSettings() {
  * 接続テスト
  */
 async function testConnection() {
+  log(LogLevel.INFO, '接続テストを開始します', null, 'PopupScript');
+
   showStatus('🔄 接続テスト中...', 'info');
   testConnectionButton.disabled = true;
 
   try {
+    log(LogLevel.DEBUG, '接続テストメッセージを送信します', null, 'PopupScript');
+
     const response = await chrome.runtime.sendMessage({
       action: 'testConnection'
     });
 
     if (response.success) {
       const modelCount = response.models.length;
+      log(LogLevel.INFO, '接続テスト成功', {
+        modelCount: modelCount,
+        models: response.models.map(m => m.id)
+      }, 'PopupScript');
+
       showStatus(`✅ 接続成功！（${modelCount}個のモデルが利用可能）`, 'success');
     } else {
+      log(LogLevel.ERROR, '接続テスト失敗', {
+        error: response.error
+      }, 'PopupScript');
+
       showStatus(`❌ 接続失敗: ${response.error}`, 'error');
     }
   } catch (error) {
+    log(LogLevel.ERROR, '接続テスト中にエラーが発生しました', {
+      error: error.message
+    }, 'PopupScript');
+
     showStatus(`❌ エラー: ${error.message}`, 'error');
   } finally {
     testConnectionButton.disabled = false;
+    log(LogLevel.DEBUG, '接続テスト完了', null, 'PopupScript');
   }
 }
 
@@ -164,8 +210,14 @@ function showStatus(message, type) {
  * 履歴を読み込み
  */
 function loadHistory() {
+  log(LogLevel.DEBUG, '翻訳履歴を読み込みます', null, 'PopupScript');
+
   chrome.storage.local.get(['history'], (result) => {
     const history = result.history || [];
+
+    log(LogLevel.DEBUG, '翻訳履歴を読み込みました', {
+      historyCount: history.length
+    }, 'PopupScript');
 
     if (history.length === 0) {
       historyList.innerHTML = '<div class="history-empty">翻訳履歴はありません</div>';
@@ -184,6 +236,8 @@ function loadHistory() {
         <div class="history-translated">${escapeHtml(entry.translatedText)}</div>
       </div>
     `).join('');
+
+    log(LogLevel.DEBUG, '翻訳履歴を表示しました', null, 'PopupScript');
   });
 }
 
@@ -191,12 +245,18 @@ function loadHistory() {
  * 履歴を消去
  */
 function clearHistory() {
+  log(LogLevel.DEBUG, '履歴消去を試行します', null, 'PopupScript');
+
   if (!confirm('翻訳履歴を全て消去しますか？')) {
+    log(LogLevel.DEBUG, '履歴消去がキャンセルされました', null, 'PopupScript');
     return;
   }
 
+  log(LogLevel.INFO, '翻訳履歴を消去します', null, 'PopupScript');
+
   chrome.storage.local.set({ history: [] }, () => {
     loadHistory();
+    log(LogLevel.INFO, '翻訳履歴を消去しました', null, 'PopupScript');
     showStatus('✅ 履歴を消去しました', 'success');
   });
 }
