@@ -220,22 +220,53 @@ function loadHistory() {
     }, 'PopupScript');
 
     if (history.length === 0) {
-      historyList.innerHTML = '<div class="history-empty">翻訳履歴はありません</div>';
+      historyList.textContent = '';
+      const empty = document.createElement('div');
+      empty.className = 'history-empty';
+      empty.textContent = '翻訳履歴はありません';
+      historyList.appendChild(empty);
       return;
     }
 
-    // 履歴を表示
-    historyList.innerHTML = history.map(entry => `
-      <div class="history-item">
-        <div class="history-header">
-          <span class="history-lang">${entry.sourceLang} → ${entry.targetLang}</span>
-          <span class="history-time">${formatTimestamp(entry.timestamp)}</span>
-        </div>
-        <div class="history-original">${escapeHtml(entry.originalText)}</div>
-        <div class="history-arrow">↓</div>
-        <div class="history-translated">${escapeHtml(entry.translatedText)}</div>
-      </div>
-    `).join('');
+    // 履歴を表示（安全なDOM生成）
+    historyList.textContent = '';
+    for (const entry of history) {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+
+      const header = document.createElement('div');
+      header.className = 'history-header';
+
+      const lang = document.createElement('span');
+      lang.className = 'history-lang';
+      lang.textContent = `${entry.sourceLang} → ${entry.targetLang}`;
+
+      const time = document.createElement('span');
+      time.className = 'history-time';
+      time.textContent = formatTimestamp(entry.timestamp);
+
+      header.appendChild(lang);
+      header.appendChild(time);
+
+      const original = document.createElement('div');
+      original.className = 'history-original';
+      original.textContent = entry.originalText;
+
+      const arrow = document.createElement('div');
+      arrow.className = 'history-arrow';
+      arrow.textContent = '↓';
+
+      const translated = document.createElement('div');
+      translated.className = 'history-translated';
+      translated.textContent = entry.translatedText;
+
+      item.appendChild(header);
+      item.appendChild(original);
+      item.appendChild(arrow);
+      item.appendChild(translated);
+
+      historyList.appendChild(item);
+    }
 
     log(LogLevel.DEBUG, '翻訳履歴を表示しました', null, 'PopupScript');
   });
@@ -305,7 +336,7 @@ function formatTimestamp(timestamp) {
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
-  return div.innerHTML;
+  return div.textContent;
 }
 
 // イベントリスナー
