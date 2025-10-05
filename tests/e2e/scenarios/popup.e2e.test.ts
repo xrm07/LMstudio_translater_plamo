@@ -4,6 +4,35 @@ import { ExtensionContext, launchWithExtension, openPopupPage, cleanupBrowser, c
 import { startLmStub } from '../server/lmStub';
 import { sendRuntimeMessage, waitForRuntimeMessage } from '../helpers/runtime';
 
+interface ExtensionSettingsResult {
+  ok: boolean;
+  settings: {
+    lmStudioUrl: string;
+    modelName: string;
+    maxTokens: number;
+    temperature: number;
+    autoOpenPopup: boolean;
+  };
+}
+
+interface HistoryEntry {
+  originalText: string;
+  translatedText: string;
+}
+
+interface HistoryResponse {
+  ok: boolean;
+  history?: HistoryEntry[];
+}
+
+interface LatestResponse {
+  ok: boolean;
+  latest?: {
+    originalText: string;
+    translatedText: string;
+  };
+}
+
 interface WaitForSelectorCountOptions {
   timeout?: number;
   interval?: number;
@@ -15,6 +44,7 @@ async function waitForSelectorCount(page: Page, selector: string, expected: numb
   const start = Date.now();
   let lastCount = 0;
   const check = predicate ?? ((count: number) => count >= expected);
+  const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
   while (Date.now() - start < timeout) {
     lastCount = await page.evaluate((sel) => {
@@ -25,7 +55,7 @@ async function waitForSelectorCount(page: Page, selector: string, expected: numb
       return lastCount;
     }
 
-    await page.waitForTimeout(interval);
+    await sleep(interval);
   }
 
   throw new Error(`Timed out waiting for selector "${selector}" (last count: ${lastCount})`);
@@ -69,8 +99,8 @@ describe('PLaMo Translate拡張機能 - ポップアップUI E2Eテスト', () =
       settingsTab?.click();
     });
 
-    // 少し待機してタブが切り替わるのを待つ
-    await popupPage.waitForTimeout(500);
+    // 設定タブの要素が表示されるまで待機
+    await popupPage.waitForSelector('#lmstudio-url', { visible: true, timeout: 5000 });
 
     await popupPage.evaluate((baseUrl) => {
       const urlInput = document.getElementById('lmstudio-url') as HTMLInputElement;
@@ -102,8 +132,8 @@ describe('PLaMo Translate拡張機能 - ポップアップUI E2Eテスト', () =
 
     // モデルオプションが更新されていることを確認
     const modelOptions = await popupPage.evaluate(() => {
-      const datalist = document.getElementById('model-options');
-      return Array.from(datalist?.options || []).map(option => option.value);
+      const datalist = document.getElementById('model-options') as HTMLDataListElement | null;
+      return Array.from(datalist?.options ?? []).map(option => (option as HTMLOptionElement).value);
     });
 
     expect(modelOptions).toContain('mmnga/plamo-2-translate-gguf');
@@ -131,7 +161,7 @@ describe('PLaMo Translate拡張機能 - ポップアップUI E2Eテスト', () =
       settingsTab?.click();
     });
 
-    await popupPage.waitForTimeout(500);
+    await popupPage.waitForSelector('#lmstudio-url', { visible: true, timeout: 5000 });
 
     // 設定値を変更
     await popupPage.evaluate((baseUrl) => {
@@ -167,7 +197,7 @@ describe('PLaMo Translate拡張機能 - ポップアップUI E2Eテスト', () =
     expect(statusText).toContain('設定を保存しました');
 
     // 設定がストレージに保存されていることを確認
-    const settingsResult = await sendRuntimeMessage<any>(popupPage, { e2e: 'getSettings' });
+    const settingsResult = await sendRuntimeMessage<ExtensionSettingsResult>(popupPage, { e2e: 'getSettings' });
 
     expect(settingsResult.ok).toBe(true);
     expect(settingsResult.settings.lmStudioUrl).toBe(lmStub.baseUrl);
@@ -233,16 +263,22 @@ describe('PLaMo Translate拡張機能 - ポップアップUI E2Eテスト', () =
         url: pageUrl
       });
 
-      await waitForRuntimeMessage<any>(controlPage, { e2e: 'getLatest' }, (resp: any) => {
-        return resp?.ok && resp.latest?.originalText === text;
-      }, { description: `latest translation for "${text}"` });
+      await waitForRuntimeMessage<LatestResponse>(
+        controlPage,
+        { e2e: 'getLatest' },
+        (resp) => resp?.ok === true && resp.latest?.originalText === text,
+        { description: `latest translation for "${text}"` }
+      );
 
       await testPage.close();
     }
 
-    await waitForRuntimeMessage<any>(controlPage, { e2e: 'getHistory' }, (resp: any) => {
-      return resp?.ok && resp.history?.length === testTexts.length;
-    }, { description: 'history length to reach expected count' });
+    await waitForRuntimeMessage<HistoryResponse>(
+      controlPage,
+      { e2e: 'getHistory' },
+      (resp) => resp?.ok === true && (resp.history?.length ?? 0) === testTexts.length,
+      { description: 'history length to reach expected count' }
+    );
     await controlPage.close();
 
     // ポップアップページを開く
@@ -281,9 +317,12 @@ describe('PLaMo Translate拡張機能 - ポップアップUI E2Eテスト', () =
     // 少し待機して履歴が消去されるのを待つ
     await waitForSelectorCount(popupPage, '.history-item', 0, { predicate: (count) => count === 0 });
 
-    await waitForRuntimeMessage(popupPage, { e2e: 'getHistory' }, (resp: any) => {
-      return resp?.ok && resp.history?.length === 0;
-    }, { description: 'history storage cleared' });
+    await waitForRuntimeMessage<HistoryResponse>(
+      popupPage,
+      { e2e: 'getHistory' },
+      (resp) => resp?.ok === true && (resp.history?.length ?? 0) === 0,
+      { description: 'history storage cleared' }
+    );
 
     // 履歴が空になっていることを確認
     const historyItemsAfterClear = await popupPage.evaluate(() => {
@@ -301,10 +340,11 @@ describe('PLaMo Translate拡張機能 - ポップアップUI E2Eテスト', () =
     expect(emptyMessage).toContain('翻訳履歴はありません');
 
     // ストレージからも履歴が消去されていることを確認
-    const historyResult = await sendRuntimeMessage<any>(popupPage, { e2e: 'getHistory' });
+    const historyResult = await sendRuntimeMessage<HistoryResponse>(popupPage, { e2e: 'getHistory' });
 
     expect(historyResult.ok).toBe(true);
-    expect(historyResult.history).toHaveLength(0);
+    const clearedHistory = historyResult.history ?? [];
+    expect(clearedHistory).toHaveLength(0);
 
     await popupPage.close();
   }, 45000);
@@ -354,9 +394,12 @@ describe('PLaMo Translate拡張機能 - ポップアップUI E2Eテスト', () =
       url: latestPageUrl
     });
 
-    await waitForRuntimeMessage(controlPage, { e2e: 'getLatest' }, (resp: any) => {
-      return resp?.ok && resp.latest?.originalText === latestSourceText;
-    }, { description: 'latest translation stored' });
+    await waitForRuntimeMessage<LatestResponse>(
+      controlPage,
+      { e2e: 'getLatest' },
+      (resp) => resp?.ok === true && resp.latest?.originalText === latestSourceText,
+      { description: 'latest translation stored' }
+    );
 
     await latestPage.close();
     await controlPage.close();

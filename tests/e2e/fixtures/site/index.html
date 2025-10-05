@@ -61,6 +61,10 @@
     <h2>長いテキスト（パフォーマンステスト用）</h2>
     <div class="japanese-text" id="long-content">
       これは比較的長い日本語テキストです。拡張機能の翻訳機能が長いテキストでも適切に処理できるかをテストするためのものです。このテキストは複数文から構成されており、翻訳処理の安定性とパフォーマンスを検証するのに適しています。拡張機能が正しく動作し、長いテキストでも適切な翻訳結果を返せることを確認してください。このテキストはテスト専用であり、実際のコンテンツではありませんが、拡張機能の機能を十分にテストできる内容となっています。
+      
+      さらに長いテキストを追加することで、実際の使用シナリオに近い状況でのパフォーマンステストが可能になります。複数の段落にわたる長文は、メモリ使用量、処理時間、UIの応答性など、さまざまな側面での拡張機能の動作を検証するのに役立ちます。実際のウェブページでは、ユーザーが長い記事や文書全体を翻訳することも多いため、このような長文に対する処理能力は重要です。
+      
+      また、長いテキストには様々な文型や表現が含まれることで、翻訳の品質や一貫性をより包括的にテストできます。短い文だけでなく、複雑な構文や専門用語、日常会話表現なども含めることで、拡張機能の実用性を多角的に評価できます。パフォーマンステストにおいては、処理速度だけでなく、リソースの効率的な利用や、大量のテキスト処理時のエラーハンドリングの堅牢性も確認する必要があります。
     </div>
   </div>
 
@@ -71,12 +75,25 @@
       const contentAreas = document.querySelectorAll('.japanese-text, .english-text, .mixed-text');
 
       contentAreas.forEach(area => {
+        // キーボード操作に対応
+        area.setAttribute('tabindex', '0');
+        area.setAttribute('role', 'button');
         area.addEventListener('click', function() {
           const selection = window.getSelection();
           const range = document.createRange();
           range.selectNodeContents(this);
           selection.removeAllRanges();
           selection.addRange(range);
+        });
+        area.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(this);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
         });
       });
     });

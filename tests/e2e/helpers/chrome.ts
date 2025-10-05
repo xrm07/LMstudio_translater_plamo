@@ -1,10 +1,10 @@
-import puppeteer, { Browser, Page, Target } from 'puppeteer';
+import puppeteer, { Browser, Page, Target, WebWorker } from 'puppeteer';
 import { promises as fs } from 'fs';
 
 export interface ExtensionContext {
   browser: Browser;
   extensionId: string;
-  serviceWorker: any;
+  serviceWorker: WebWorker;
 }
 
 /**
@@ -14,9 +14,8 @@ export interface ExtensionContext {
  */
 export async function launchWithExtension(extensionPath: string): Promise<ExtensionContext> {
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
-  const browser = await puppeteer.launch({
+  const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
     headless: false,
-    executablePath,
     args: [
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
@@ -30,7 +29,13 @@ export async function launchWithExtension(extensionPath: string): Promise<Extens
     ],
     defaultViewport: null,
     ignoreDefaultArgs: ['--disable-extensions']
-  });
+  };
+
+  if (executablePath) {
+    launchOptions.executablePath = executablePath;
+  }
+
+  const browser = await puppeteer.launch(launchOptions);
 
   // MV3 Service Workerターゲットから拡張IDを抽出
   const serviceWorkerTarget = await waitForServiceWorkerTarget(browser);
@@ -60,7 +65,7 @@ async function waitForServiceWorkerTarget(browser: Browser): Promise<Target | nu
       candidate => candidate.type() === 'service_worker' && candidate.url().startsWith('chrome-extension://'),
       { timeout: 30000 }
     );
-    return target || null;
+    return target;
   } catch (error) {
     return null;
   }
@@ -104,10 +109,8 @@ export async function takeScreenshot(page: Page, filename: string): Promise<void
     await page.screenshot({ path: filepath, fullPage: true });
     console.log(`Screenshot saved: ${filepath}`);
   } catch (error) {
-    const errorMsg = (typeof error === 'object' && error !== null && 'message' in (error as any))
-      ? (error as any).message
-      : String(error);
-    console.warn(`Failed to save screenshot: ${errorMsg}`);
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Failed to save screenshot: ${message}`);
   }
 }
 

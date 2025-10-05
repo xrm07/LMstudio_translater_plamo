@@ -8,13 +8,15 @@ export const LogLevel = {
 
 export function log(level, message, data = null, scriptName = '') {
   const timestamp = new Date().toISOString();
-  const levelName = Object.keys(LogLevel)[level];
+  const LogLevelNames = {
+    [LogLevel.DEBUG]: 'DEBUG',
+    [LogLevel.INFO]: 'INFO',
+    [LogLevel.WARN]: 'WARN',
+    [LogLevel.ERROR]: 'ERROR'
+  };
+  const levelName = LogLevelNames[level] || 'UNKNOWN';
   const prefix = scriptName ? `${scriptName}: ` : '';
   const logMessage = `[${timestamp}] [${levelName}] ${prefix}${message}`;
 
-  if (data) {
-    console.log(logMessage, data);
-  } else {
-    console.log(logMessage);
-  }
+  console.log(logMessage, ...(data ? [data] : []));
 }

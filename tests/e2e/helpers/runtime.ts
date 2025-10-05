@@ -8,23 +8,45 @@ export interface WaitForMessageOptions {
 
 type RuntimeRequest = Record<string, unknown>;
 
-export async function sendRuntimeMessage<T = unknown>(page: Page, message: RuntimeRequest): Promise<T> {
-  return await page.evaluate((request) => {
+interface ChromeRuntime {
+  sendMessage: <T>(req: RuntimeRequest, callback: (response: T) => void) => void;
+  lastError?: { message?: string };
+}
+
+type ChromeWindow = typeof window & {
+  chrome?: {
+    runtime?: ChromeRuntime;
+  };
+};
+
+export async function sendRuntimeMessage<T = unknown>(page: Page, message: RuntimeRequest, timeoutMs = 5000): Promise<T> {
+  return await page.evaluate((request, timeout) => {
     return new Promise<T>((resolve, reject) => {
-      const runtime = (window as typeof window & {
-        chrome?: { runtime?: { sendMessage: (req: RuntimeRequest, callback: (response: T) => void) => void } }
-      }).chrome?.runtime;
+      const chromeWindow = window as ChromeWindow;
+      const runtime = chromeWindow.chrome?.runtime;
 
       if (!runtime) {
         reject(new Error('chrome.runtime is not available in this context'));
         return;
       }
 
+      const timeoutId = window.setTimeout(() => {
+        window.clearTimeout(timeoutId);
+        reject(new Error('Timed out waiting for runtime response'));
+      }, timeout);
+
       runtime.sendMessage(request, (response: T) => {
-        resolve(response);
+        const lastErr = chromeWindow.chrome?.runtime?.lastError;
+        if (lastErr) {
+          window.clearTimeout(timeoutId);
+          reject(new Error(String(lastErr.message || lastErr)));
+        } else {
+          window.clearTimeout(timeoutId);
+          resolve(response);
+        }
       });
     });
-  }, message);
+  }, message, timeoutMs);
 }
 
 export async function waitForRuntimeMessage<T = unknown>(
@@ -37,12 +59,14 @@ export async function waitForRuntimeMessage<T = unknown>(
   const start = Date.now();
   let lastResponse: T | undefined;
 
+  const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
   while (Date.now() - start < timeout) {
     lastResponse = await sendRuntimeMessage<T>(page, message);
     if (predicate(lastResponse)) {
       return lastResponse;
     }
-    await page.waitForTimeout(interval);
+    await sleep(interval);
   }
 
   const detail = description ? ` (${description})` : '';
