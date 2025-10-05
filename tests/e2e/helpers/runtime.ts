@@ -19,8 +19,8 @@ type ChromeWindow = typeof window & {
   };
 };
 
-export async function sendRuntimeMessage<T = unknown>(page: Page, message: RuntimeRequest): Promise<T> {
-  return await page.evaluate((request) => {
+export async function sendRuntimeMessage<T = unknown>(page: Page, message: RuntimeRequest, timeoutMs = 5000): Promise<T> {
+  return await page.evaluate((request, timeout) => {
     return new Promise<T>((resolve, reject) => {
       const chromeWindow = window as ChromeWindow;
       const runtime = chromeWindow.chrome?.runtime;
@@ -31,8 +31,9 @@ export async function sendRuntimeMessage<T = unknown>(page: Page, message: Runti
       }
 
       const timeoutId = window.setTimeout(() => {
+        window.clearTimeout(timeoutId);
         reject(new Error('Timed out waiting for runtime response'));
-      }, 5000);
+      }, timeout);
 
       runtime.sendMessage(request, (response: T) => {
         const lastErr = chromeWindow.chrome?.runtime?.lastError;
@@ -45,7 +46,7 @@ export async function sendRuntimeMessage<T = unknown>(page: Page, message: Runti
         }
       });
     });
-  }, message);
+  }, message, timeoutMs);
 }
 
 export async function waitForRuntimeMessage<T = unknown>(

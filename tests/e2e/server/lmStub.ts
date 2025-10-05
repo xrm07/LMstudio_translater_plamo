@@ -2,6 +2,9 @@ import express, { type Application, type Request, type Response, type NextFuncti
 import { Server } from 'http';
 import path from 'path';
 import type { AddressInfo } from 'net';
+function isAddressInfo(address: unknown): address is AddressInfo {
+  return typeof address === 'object' && address !== null && 'port' in address;
+}
 
 export interface LmStubOptions {
   port?: number;
@@ -130,8 +133,8 @@ export class LmStubServer {
 
   private getServerAddressInfo(server: Server): { port: number } | null {
     const address = server.address();
-    if (address && typeof address === 'object') {
-      return { port: (address as AddressInfo).port };
+    if (isAddressInfo(address)) {
+      return { port: address.port };
     }
     if (typeof address === 'number') {
       return { port: address };

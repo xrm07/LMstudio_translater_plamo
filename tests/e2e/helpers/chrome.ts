@@ -14,9 +14,8 @@ export interface ExtensionContext {
  */
 export async function launchWithExtension(extensionPath: string): Promise<ExtensionContext> {
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
-  const browser = await puppeteer.launch({
+  const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
     headless: false,
-    ...(executablePath ? { executablePath } : {}),
     args: [
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
@@ -30,7 +29,13 @@ export async function launchWithExtension(extensionPath: string): Promise<Extens
     ],
     defaultViewport: null,
     ignoreDefaultArgs: ['--disable-extensions']
-  });
+  };
+
+  if (executablePath) {
+    launchOptions.executablePath = executablePath;
+  }
+
+  const browser = await puppeteer.launch(launchOptions);
 
   // MV3 Service Workerターゲットから拡張IDを抽出
   const serviceWorkerTarget = await waitForServiceWorkerTarget(browser);
