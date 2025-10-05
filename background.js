@@ -3,15 +3,7 @@
  * LM Studio APIとの連携、翻訳ロジックを管理
  */
 
-import { log, LogLevel } from './logger.js';
-
-// デフォルト設定
-const DEFAULT_SETTINGS = {
-  lmStudioUrl: 'http://localhost:1234',
-  modelName: 'mmnga/plamo-2-translate-gguf',
-  maxTokens: 1000,
-  temperature: 0
-};
+// Loggerと定数はグローバル関数として利用
 
 // 拡張機能インストール時の初期化
 chrome.runtime.onInstalled.addListener((details) => {
@@ -23,8 +15,8 @@ chrome.runtime.onInstalled.addListener((details) => {
   // デフォルト設定を保存
   chrome.storage.local.get(['settings'], (result) => {
     if (!result.settings) {
-      chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
-      log(LogLevel.INFO, 'デフォルト設定を保存しました', DEFAULT_SETTINGS, 'BackgroundScript');
+      chrome.storage.local.set({ settings: window.DEFAULT_SETTINGS });
+      log(LogLevel.INFO, 'デフォルト設定を保存しました', window.DEFAULT_SETTINGS, 'BackgroundScript');
     } else {
       log(LogLevel.INFO, '既存の設定を使用します', result.settings, 'BackgroundScript');
     }
@@ -233,7 +225,7 @@ async function translateText(text, sourceLang, targetLang) {
 
     // 設定を取得
     const result = await chrome.storage.local.get(['settings']);
-    const settings = result.settings || DEFAULT_SETTINGS;
+    const settings = result.settings || window.DEFAULT_SETTINGS;
 
     log(LogLevel.DEBUG, '設定を取得しました', {
       lmStudioUrl: settings.lmStudioUrl,
@@ -300,25 +292,8 @@ async function translateText(text, sourceLang, targetLang) {
       url: settings?.lmStudioUrl
     }, 'BackgroundScript');
 
-    // エラーメッセージの日本語化
-    let errorMessage = '翻訳エラーが発生しました';
-
-    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-      errorMessage = 'LM Studioに接続できません。サーバーが起動しているか確認してください。';
-      log(LogLevel.ERROR, 'LM Studio接続エラー', {
-        error: error.message
-      }, 'BackgroundScript');
-    } else if (error.message.includes('timeout')) {
-      errorMessage = 'リクエストがタイムアウトしました。';
-      log(LogLevel.WARN, '翻訳タイムアウト', {
-        timeout: true
-      }, 'BackgroundScript');
-    } else if (error.message.includes('500')) {
-      errorMessage = 'モデルエラーが発生しました。LM Studioの設定を確認してください。';
-      log(LogLevel.ERROR, 'モデルサーバーエラー', {
-        status: 500
-      }, 'BackgroundScript');
-    }
+    // エラーメッセージを処理
+    const errorMessage = processTranslationError(error);
 
     return {
       success: false,
@@ -336,7 +311,7 @@ async function testLMStudioConnection() {
     log(LogLevel.INFO, 'LM Studio接続テストを開始します', null, 'BackgroundScript');
 
     const result = await chrome.storage.local.get(['settings']);
-    const settings = result.settings || DEFAULT_SETTINGS;
+    const settings = result.settings || window.DEFAULT_SETTINGS;
 
     log(LogLevel.DEBUG, '接続テスト設定', {
       url: settings.lmStudioUrl
@@ -432,4 +407,38 @@ function generateUUID() {
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
+}
+
+/**
+ * 翻訳エラーを処理して適切なメッセージを返す
+ * @param {Error} error - エラーオブジェクト
+ * @returns {string} - 日本語エラーメッセージ
+ */
+function processTranslationError(error) {
+  log(LogLevel.ERROR, '翻訳エラー処理中', {
+    error: error.message,
+    stack: error.stack
+  }, 'BackgroundScript');
+
+  // エラーメッセージの日本語化
+  let errorMessage = '翻訳エラーが発生しました';
+
+  if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+    errorMessage = window.ERROR_MESSAGES.CONNECTION_FAILED;
+    log(LogLevel.ERROR, 'LM Studio接続エラー', {
+      error: error.message
+    }, 'BackgroundScript');
+  } else if (error.message.includes('timeout')) {
+    errorMessage = window.ERROR_MESSAGES.TIMEOUT;
+    log(LogLevel.WARN, '翻訳タイムアウト', {
+      timeout: true
+    }, 'BackgroundScript');
+  } else if (error.message.includes('500')) {
+    errorMessage = window.ERROR_MESSAGES.MODEL_ERROR;
+    log(LogLevel.ERROR, 'モデルサーバーエラー', {
+      status: 500
+    }, 'BackgroundScript');
+  }
+
+  return errorMessage;
 }

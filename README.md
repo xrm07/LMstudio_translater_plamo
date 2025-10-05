@@ -125,7 +125,7 @@ cd LMstudio_translater_plamo
 ## プロジェクト構成
 
 ```
-LMstudio_translater_plamo/
+plamo-translate-chrome-extension/
 ├── manifest.json          # Chrome拡張のマニフェストファイル (Manifest V3)
 ├── background.js          # バックグラウンドサービスワーカー
 ├── content.js             # コンテンツスクリプト (ページ上のUI)
@@ -133,12 +133,13 @@ LMstudio_translater_plamo/
 ├── popup.html             # ポップアップUI
 ├── popup.js               # ポップアップのロジック
 ├── popup.css              # ポップアップのスタイル
+├── logger.js              # ログ出力ユーティリティ
+├── constants.js           # 定数定義
 ├── icons/                 # 拡張機能のアイコン
 │   ├── icon16.png
 │   ├── icon48.png
 │   └── icon128.png
 ├── README.md              # このファイル
-├── CLAUDE.md              # Claude Code用ガイド
 ├── .gitignore
 └── Project/               # 設計ドキュメント
     ├── plamo-translate-requirements.md

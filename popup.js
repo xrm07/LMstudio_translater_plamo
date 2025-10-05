@@ -3,7 +3,7 @@
  * 拡張機能のポップアップUIロジック
  */
 
-import { log, LogLevel } from './logger.js';
+// Loggerと定数はグローバル関数として利用
 
 // DOM要素の取得
 const tabs = document.querySelectorAll('.popup-tab');
@@ -79,12 +79,7 @@ function loadSettings() {
   log(LogLevel.DEBUG, '設定を読み込みます', null, 'PopupScript');
 
   chrome.storage.local.get(['settings'], (result) => {
-    const settings = result.settings || {
-      lmStudioUrl: 'http://localhost:1234',
-      modelName: 'mmnga/plamo-2-translate-gguf',
-      maxTokens: 1000,
-      temperature: 0
-    };
+    const settings = result.settings || window.DEFAULT_SETTINGS;
 
     log(LogLevel.DEBUG, '設定を読み込みました', {
       lmStudioUrl: settings.lmStudioUrl,

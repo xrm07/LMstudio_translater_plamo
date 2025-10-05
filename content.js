@@ -3,7 +3,7 @@
  * Webページ上での翻訳結果表示を管理
  */
 
-import { log, LogLevel } from './logger.js';
+// Loggerと定数はグローバル関数として利用
 
 // メッセージリスナー（background scriptからの通知）
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -52,7 +52,7 @@ function showTranslationPopup(data) {
   // ポップアップ要素を作成
   const popup = document.createElement('div');
   popup.id = 'plamo-translate-popup';
-  popup.className = 'plamo-translate-popup';
+  popup.className = window.CSS_CLASSES.POPUP;
 
   // 内容を構築
   popup.innerHTML = `
@@ -88,7 +88,7 @@ function showTranslationPopup(data) {
 
   // アニメーション
   setTimeout(() => {
-    popup.classList.add('plamo-translate-show');
+    popup.classList.add(window.CSS_CLASSES.POPUP_SHOW);
   }, 10);
 }
 
@@ -103,7 +103,7 @@ function showErrorPopup(errorMessage) {
   // エラーポップアップを作成
   const popup = document.createElement('div');
   popup.id = 'plamo-translate-popup';
-  popup.className = 'plamo-translate-popup plamo-translate-error';
+  popup.className = `${window.CSS_CLASSES.POPUP} ${window.CSS_CLASSES.POPUP_ERROR}`;
 
   popup.innerHTML = `
     <div class="plamo-translate-header">
@@ -135,7 +135,7 @@ function showErrorPopup(errorMessage) {
 
   // アニメーション
   setTimeout(() => {
-    popup.classList.add('plamo-translate-show');
+    popup.classList.add(window.CSS_CLASSES.POPUP_SHOW);
   }, 10);
 }
 
@@ -154,7 +154,7 @@ function positionPopup(popup) {
     let left = rect.left + window.scrollX;
 
     // 画面右端を超える場合は左に調整
-    const popupWidth = 400; // CSSで指定した幅
+    const popupWidth = window.TRANSLATION_CONFIG.POPUP_WIDTH;
     if (left + popupWidth > window.innerWidth) {
       left = window.innerWidth - popupWidth - 20;
     }
@@ -235,10 +235,10 @@ function handleEscapeKey(event) {
 function removeExistingPopup() {
   const existingPopup = document.getElementById('plamo-translate-popup');
   if (existingPopup) {
-    existingPopup.classList.remove('plamo-translate-show');
+    existingPopup.classList.remove(window.CSS_CLASSES.POPUP_SHOW);
     setTimeout(() => {
       existingPopup.remove();
-    }, 200); // アニメーション時間
+    }, window.TRANSLATION_CONFIG.ANIMATION_DURATION);
   }
 
   // イベントリスナーをクリーンアップ
