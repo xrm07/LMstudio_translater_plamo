@@ -21,7 +21,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     showTranslationPopup(request);
     sendResponse({ success: true });
-    return true;
   } else if (request.action === 'showError') {
     log(LogLevel.WARN, 'エラーを表示します', {
       error: request.error
@@ -29,15 +28,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     showErrorPopup(request.error);
     sendResponse({ success: true });
-    return true;
-  } else if (request.action === 'getSelectionText') {
-    const selection = window.getSelection();
-    const text = selection ? selection.toString() : '';
-    log(LogLevel.DEBUG, 'テキスト選択を取得しました', {
-      textLength: text.length
-    }, 'ContentScript');
-    sendResponse({ text });
-    return true;
   } else {
     log(LogLevel.WARN, '未知のアクションを受信しました', {
       action: request.action
@@ -150,10 +140,6 @@ function showTranslationPopup(data) {
  * @param {string} errorMessage - エラーメッセージ
  */
 function showErrorPopup(errorMessage) {
-  log(LogLevel.DEBUG, 'エラーポップアップを作成します', {
-    errorMessage: errorMessage
-  }, 'ContentScript');
-
   // 既存のポップアップを削除
   removeExistingPopup();
 
@@ -181,26 +167,22 @@ function showErrorPopup(errorMessage) {
   const errorDiv = document.createElement('div');
   errorDiv.className = 'plamo-translate-error-message';
   errorDiv.textContent = errorMessage;
-  
   const hint = document.createElement('div');
   hint.className = 'plamo-translate-error-hint';
   const strong = document.createElement('strong');
   strong.textContent = 'ヒント:';
-  const br1 = document.createElement('br');
-  const text1 = document.createTextNode('• LM Studioが起動しているか確認してください');
-  const br2 = document.createElement('br');
-  const text2 = document.createTextNode('• モデルがロードされているか確認してください');
-  const br3 = document.createElement('br');
-  const text3 = document.createTextNode('• 拡張機能の設定を確認してください');
-  
+  const list = document.createElement('ul');
+  const li1 = document.createElement('li');
+  li1.textContent = 'LM Studioが起動しているか確認してください';
+  const li2 = document.createElement('li');
+  li2.textContent = 'モデルがロードされているか確認してください';
+  const li3 = document.createElement('li');
+  li3.textContent = '拡張機能の設定を確認してください';
+  list.appendChild(li1);
+  list.appendChild(li2);
+  list.appendChild(li3);
   hint.appendChild(strong);
-  hint.appendChild(br1);
-  hint.appendChild(text1);
-  hint.appendChild(br2);
-  hint.appendChild(text2);
-  hint.appendChild(br3);
-  hint.appendChild(text3);
-  
+  hint.appendChild(list);
   body.appendChild(errorDiv);
   body.appendChild(hint);
 
@@ -338,13 +320,11 @@ function removeExistingPopup() {
 function copyToClipboard(text) {
   log(LogLevel.DEBUG, 'クリップボードにコピーします', {
     textLength: text.length
-  }, 'ContentScript');
+  });
 
   // navigator.clipboard APIを使用
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(() => {
-      log(LogLevel.INFO, 'クリップボードコピー成功', null, 'ContentScript');
-    }).catch(err => {
+    navigator.clipboard.writeText(text).catch(err => {
       log(LogLevel.ERROR, 'クリップボードコピー失敗（navigator.clipboard）', {
         error: err.message
       }, 'ContentScript');
