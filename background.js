@@ -213,6 +213,7 @@ async function handleTranslation(text, tabId) {
  */
 async function translateText(text, sourceLang, targetLang) {
   const startTime = Date.now();
+  let settingsUrlForLog = null;
 
   try {
     log(LogLevel.DEBUG, '翻訳API呼び出しを開始します', {
@@ -224,6 +225,7 @@ async function translateText(text, sourceLang, targetLang) {
     // 設定を取得
     const result = await chrome.storage.local.get(['settings']);
     const settings = result.settings || DEFAULT_SETTINGS;
+    settingsUrlForLog = settings.lmStudioUrl;
 
     log(LogLevel.DEBUG, '設定を取得しました', {
       lmStudioUrl: settings.lmStudioUrl,
@@ -287,7 +289,7 @@ async function translateText(text, sourceLang, targetLang) {
     log(LogLevel.ERROR, '翻訳APIエラーが発生しました', {
       error: error.message,
       stack: error.stack,
-      url: settings?.lmStudioUrl
+      url: settingsUrlForLog
     }, 'BackgroundScript');
 
     // エラーメッセージの日本語化

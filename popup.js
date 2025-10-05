@@ -38,7 +38,9 @@ function initTabs() {
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
       const targetTab = tab.dataset.tab;
-      switchTab(targetTab);
+      if (targetTab) {
+        switchTab(targetTab);
+      }
     });
   });
 }
