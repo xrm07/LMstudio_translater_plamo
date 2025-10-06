@@ -62,7 +62,8 @@ export async function waitForRuntimeMessage<T = unknown>(
   const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
   while (Date.now() - start < timeout) {
-    lastResponse = await sendRuntimeMessage<T>(page, message);
+    const remaining = Math.max(50, timeout - (Date.now() - start));
+    lastResponse = await sendRuntimeMessage<T>(page, message, remaining);
     if (predicate(lastResponse)) {
       return lastResponse;
     }
@@ -70,5 +71,7 @@ export async function waitForRuntimeMessage<T = unknown>(
   }
 
   const detail = description ? ` (${description})` : '';
-  throw new Error(`Timed out waiting for runtime message${detail}`);
+  const error = new Error(`Timed out waiting for runtime message${detail}`);
+  (error as any).lastResponse = lastResponse;
+  throw error;
 }

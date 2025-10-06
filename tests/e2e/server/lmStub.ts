@@ -23,17 +23,19 @@ interface ChatCompletionRequestBody {
 }
 
 function calculatePromptLength(body: ChatCompletionRequestBody): number {
-  const content = body.messages?.[0]?.content;
-  if (typeof content === 'string') {
-    return content.length;
+  const messages = body.messages || [];
+  let total = 0;
+  for (const msg of messages) {
+    const content = msg?.content as unknown;
+    if (typeof content === 'string') {
+      total += content.length;
+    } else if (Array.isArray(content)) {
+      total += content.map(item => String(item)).join('').length;
+    } else if (content !== undefined && content !== null) {
+      total += String(content).length;
+    }
   }
-  if (Array.isArray(content)) {
-    return content.map(item => String(item)).join('').length;
-  }
-  if (content !== undefined && content !== null) {
-    return String(content).length;
-  }
-  return 0;
+  return total;
 }
 
 /**
@@ -58,6 +60,10 @@ export class LmStubServer {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Headers', 'Content-Type');
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      if (req.method === 'OPTIONS') {
+        res.sendStatus(204);
+        return;
+      }
       next();
     });
 
@@ -153,15 +159,17 @@ export class LmStubServer {
       try {
         const server = this.app.listen(this.port, '127.0.0.1');
         this.server = server;
+        const onError = (err: unknown) => reject(err);
+        server.once('error', onError);
         server.once('listening', () => {
           const addressInfo = this.getServerAddressInfo(server);
           if (addressInfo) {
             this.port = addressInfo.port;
           }
           console.log(`LM Studioスタブサーバーがポート${this.port}で起動しました`);
+          server.off('error', onError);
           resolve(this.port);
         });
-        server.once('error', reject);
       } catch (error) {
         reject(error);
       }
@@ -172,17 +180,32 @@ export class LmStubServer {
    * サーバーを停止
    */
   async stop(): Promise<void> {
-    return new Promise((resolve) => {
-      if (this.server) {
-        this.server.close(() => {
-          console.log(`LM Studioスタブサーバーを停止しました`);
-          this.server = null;
-          resolve();
-        });
-      } else {
+    return new Promise((resolve, reject) => {
+      if (!this.server) {
         this.server = null;
         resolve();
+        return;
       }
+      const server = this.server;
+      let settled = false;
+      const timeout = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          reject(new Error('Server close timed out'));
+        }
+      }, 5000);
+      server.close((err?: Error) => {
+        if (settled) return;
+        clearTimeout(timeout);
+        settled = true;
+        if (err) {
+          reject(err);
+          return;
+        }
+        console.log(`LM Studioスタブサーバーを停止しました`);
+        this.server = null;
+        resolve();
+      });
     });
   }
 

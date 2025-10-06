@@ -67,6 +67,7 @@ async function waitForServiceWorkerTarget(browser: Browser): Promise<Target | nu
     );
     return target;
   } catch (error) {
+    console.warn('Failed to detect MV3 service worker target:', error instanceof Error ? error.message : String(error));
     return null;
   }
 }
@@ -92,7 +93,7 @@ export async function openPopupPage(context: ExtensionContext): Promise<Page> {
  */
 export async function createTestPage(browser: Browser, baseUrl: string, fixturePath = '/fixtures/index.html'): Promise<Page> {
   const page = await browser.newPage();
-  await page.goto(`${baseUrl}${fixturePath}`, { waitUntil: 'networkidle2' });
+  await page.goto(`${baseUrl}${fixturePath}`, { waitUntil: 'domcontentloaded' });
   return page;
 }
 
@@ -100,12 +101,12 @@ export async function createTestPage(browser: Browser, baseUrl: string, fixtureP
  * ページのスクリーンショットを保存
  */
 export async function takeScreenshot(page: Page, filename: string): Promise<void> {
-  const screenshotsDir = './test-results/screenshots';
+  const baseDir = process.env.E2E_SCREENSHOTS_DIR || './test-results/screenshots';
   try {
     // テスト結果ディレクトリを作成（存在しない場合）
-    await fs.mkdir(screenshotsDir, { recursive: true });
+    await fs.mkdir(baseDir, { recursive: true });
 
-    const filepath = `${screenshotsDir}/${filename}.png`;
+    const filepath = `${baseDir}/${filename}.png`;
     await page.screenshot({ path: filepath, fullPage: true });
     console.log(`Screenshot saved: ${filepath}`);
   } catch (error) {

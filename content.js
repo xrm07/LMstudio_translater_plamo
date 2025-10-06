@@ -51,6 +51,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     log(LogLevel.WARN, '未知のアクションを受信しました', {
       action: request.action
     }, 'ContentScript');
+    try {
+      sendResponse({ success: false, error: 'unknown_action', action: request.action });
+    } catch {}
   }
 });
 

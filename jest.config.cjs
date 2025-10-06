@@ -7,9 +7,7 @@ module.exports = {
   },
   transformIgnorePatterns: ['/node_modules/'],
   collectCoverageFrom: [
-    'tests/e2e/**/*.{ts,js}',
-    '!tests/e2e/helpers/chrome.ts',
-    '!tests/e2e/server/lmStub.ts'
+    'src/**/*.{ts,js}'
   ],
   setupFilesAfterEnv: ['<rootDir>/tests/e2e/setup.ts'],
   testTimeout: 60000,

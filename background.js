@@ -113,8 +113,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  // E2Eテスト用のデバッグフック
+  // E2Eテスト用のデバッグフック（拡張内ページからの要求のみに制限）
   if (typeof request.e2e === 'string') {
+    const fromExtension = sender?.id === chrome.runtime.id && typeof sender?.url === 'string' && sender.url.startsWith(`chrome-extension://${chrome.runtime.id}/`);
+    if (!fromExtension) {
+      log(LogLevel.WARN, 'E2Eコマンドを拒否しました（未許可ソース）', {
+        senderId: sender?.id,
+        senderUrl: sender?.url
+      }, 'BackgroundScript');
+      sendResponse({ ok: false, error: 'forbidden' });
+      return true;
+    }
     handleE2EMessage(request, sender, sendResponse);
     return true;
   }
@@ -151,15 +160,32 @@ async function handleTranslation(text, tabId) {
         translationLength: result.translation.length
       }, 'BackgroundScript');
 
-      // content scriptに結果を送信
-      chrome.tabs.sendMessage(tabId, {
-        action: 'showTranslation',
-        originalText: text,
-        translatedText: result.translation,
-        sourceLang: sourceLang,
-        targetLang: targetLang,
-        processingTime: result.processingTime
-      });
+      // 最新翻訳を保存（ポップアップの最新カード用）
+      try {
+        const pageUrl = await (async () => {
+          try {
+            const tab = await new Promise((resolve) => {
+              chrome.tabs.get(tabId, (t) => resolve(t));
+            });
+            return typeof tab?.url === 'string' ? tab.url : '';
+          } catch {
+            return '';
+          }
+        })();
+
+        const latest = {
+          id: generateUUID(),
+          originalText: text,
+          translatedText: result.translation,
+          sourceLang,
+          targetLang,
+          timestamp: Date.now(),
+          url: pageUrl
+        };
+        await chrome.storage.local.set({ latest });
+      } catch (e) {
+        log(LogLevel.WARN, '最新翻訳の保存に失敗しました', { error: e?.message }, 'BackgroundScript');
+      }
 
       // 翻訳履歴に保存
       saveToHistory({
@@ -170,7 +196,55 @@ async function handleTranslation(text, tabId) {
         timestamp: Date.now()
       });
 
-      log(LogLevel.DEBUG, '翻訳結果を送信しました', {
+      // autoOpenPopup設定に従って挙動を変更
+      try {
+        const stored = await chrome.storage.local.get(['settings']);
+        const autoOpenPopup = Boolean((stored.settings || DEFAULT_SETTINGS).autoOpenPopup);
+
+        if (autoOpenPopup && chrome.action && typeof chrome.action.openPopup === 'function') {
+          await new Promise((resolve) => {
+            chrome.action.openPopup(() => {
+              const lastError = chrome.runtime.lastError;
+              if (lastError) {
+                // フォールバック：オーバーレイ表示
+                log(LogLevel.WARN, 'autoOpenPopupに失敗したためオーバーレイへフォールバック', { error: lastError.message }, 'BackgroundScript');
+                chrome.tabs.sendMessage(tabId, {
+                  action: 'showTranslation',
+                  originalText: text,
+                  translatedText: result.translation,
+                  sourceLang: sourceLang,
+                  targetLang: targetLang,
+                  processingTime: result.processingTime
+                });
+              }
+              resolve();
+            });
+          });
+        } else {
+          // オーバーレイ表示（従来動作）
+          chrome.tabs.sendMessage(tabId, {
+            action: 'showTranslation',
+            originalText: text,
+            translatedText: result.translation,
+            sourceLang: sourceLang,
+            targetLang: targetLang,
+            processingTime: result.processingTime
+          });
+        }
+      } catch (e) {
+        // 安全側フォールバック：オーバーレイ表示
+        log(LogLevel.WARN, 'autoOpenPopup処理中に例外。オーバーレイへフォールバック', { error: e?.message }, 'BackgroundScript');
+        chrome.tabs.sendMessage(tabId, {
+          action: 'showTranslation',
+          originalText: text,
+          translatedText: result.translation,
+          sourceLang: sourceLang,
+          targetLang: targetLang,
+          processingTime: result.processingTime
+        });
+      }
+
+      log(LogLevel.DEBUG, '翻訳結果を送信しました/処理しました', {
         tabId: tabId,
         processingTime: result.processingTime
       }, 'BackgroundScript');
@@ -523,36 +597,45 @@ async function testLMStudioConnection(override) {
  * @param {Object} entry - 翻訳履歴エントリ
  */
 async function saveToHistory(entry) {
+  // 直列化のためのモジュールスコープキュー
+  if (typeof globalThis.__historyWriteQueue === 'undefined') {
+    Object.defineProperty(globalThis, '__historyWriteQueue', {
+      value: Promise.resolve(),
+      writable: true
+    });
+  }
+
   try {
     log(LogLevel.DEBUG, '翻訳履歴を保存します', {
       sourceLang: entry.sourceLang,
       targetLang: entry.targetLang,
       textLength: entry.originalText.length
     }, 'BackgroundScript');
+    // 直列化して競合回避
+    globalThis.__historyWriteQueue = globalThis.__historyWriteQueue.then(async () => {
+      const result = await chrome.storage.local.get(['history']);
+      let history = result.history || [];
 
-    const result = await chrome.storage.local.get(['history']);
-    let history = result.history || [];
+      const newEntry = {
+        id: generateUUID(),
+        ...entry
+      };
 
-    // 新しいエントリを追加
-    const newEntry = {
-      id: generateUUID(),
-      ...entry
-    };
+      history.unshift(newEntry);
 
-    history.unshift(newEntry);
+      if (history.length > 50) {
+        history = history.slice(0, 50);
+        log(LogLevel.DEBUG, '履歴が上限に達したため古いエントリを削除しました', null, 'BackgroundScript');
+      }
 
-    // 最大50件に制限
-    if (history.length > 50) {
-      history = history.slice(0, 50);
-      log(LogLevel.DEBUG, '履歴が上限に達したため古いエントリを削除しました', null, 'BackgroundScript');
-    }
+      await chrome.storage.local.set({ history });
 
-    await chrome.storage.local.set({ history: history });
-
-    log(LogLevel.INFO, '翻訳履歴を保存しました', {
-      historyCount: history.length,
-      entryId: newEntry.id
-    }, 'BackgroundScript');
+      log(LogLevel.INFO, '翻訳履歴を保存しました', {
+        historyCount: history.length,
+        entryId: newEntry.id
+      }, 'BackgroundScript');
+    });
+    await globalThis.__historyWriteQueue;
   } catch (error) {
     log(LogLevel.ERROR, '翻訳履歴の保存に失敗しました', {
       error: error.message,
