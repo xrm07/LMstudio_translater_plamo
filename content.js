@@ -3,7 +3,26 @@
  * Webページ上での翻訳結果表示を管理
  */
 
-import { log, LogLevel } from './logger.js';
+const LogLevel = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3
+};
+
+function log(level, message, data = null, scriptName = '') {
+  const timestamp = new Date().toISOString();
+  const levelNames = {
+    [LogLevel.DEBUG]: 'DEBUG',
+    [LogLevel.INFO]: 'INFO',
+    [LogLevel.WARN]: 'WARN',
+    [LogLevel.ERROR]: 'ERROR'
+  };
+  const levelName = levelNames[level] || 'UNKNOWN';
+  const prefix = scriptName ? `${scriptName}: ` : '';
+  const logMessage = `[${timestamp}] [${levelName}] ${prefix}${message}`;
+  console.log(logMessage, ...(data ? [data] : []));
+}
 
 // メッセージリスナー（background scriptからの通知）
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

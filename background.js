@@ -94,7 +94,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'testConnection') {
     log(LogLevel.INFO, '接続テストメッセージリクエストを処理します', null, 'BackgroundScript');
 
-    testLMStudioConnection()
+    testLMStudioConnection(request.settingsOverride)
       .then(result => {
         log(LogLevel.DEBUG, '接続テストメッセージレスポンスを送信します', {
           success: result.success
@@ -416,6 +416,11 @@ async function handleE2EMessage(request, sender, sendResponse) {
             // URLで対象タブを検索してオーバーレイを表示
             const tabs = await chrome.tabs.query({ url: pageUrl });
             const tabId = tabs?.[0]?.id ?? sender.tab?.id;
+            log(LogLevel.DEBUG, 'Fallback overlay dispatch', {
+              pageUrl,
+              queriedTabs: tabs?.length || 0,
+              resolvedTabId: tabId
+            }, 'BackgroundScript');
             if (typeof tabId === 'number') {
               chrome.tabs.sendMessage(tabId, {
                 action: 'showTranslation',
@@ -424,10 +429,22 @@ async function handleE2EMessage(request, sender, sendResponse) {
                 sourceLang,
                 targetLang,
                 processingTime: 0
+              }, () => {
+                const lastError = chrome.runtime.lastError;
+                if (lastError) {
+                  log(LogLevel.WARN, 'Overlay message failed', {
+                    error: lastError.message,
+                    tabId
+                  }, 'BackgroundScript');
+                }
               });
             }
           } catch (e) {
             // タブが取得できない場合は何もしない
+            log(LogLevel.WARN, 'Fallback overlay dispatch failed', {
+              error: e?.message,
+              pageUrl
+            }, 'BackgroundScript');
           }
         }
 
@@ -449,12 +466,16 @@ async function handleE2EMessage(request, sender, sendResponse) {
  * LM Studio接続テスト
  * @returns {Promise<Object>} - 接続テスト結果
  */
-async function testLMStudioConnection() {
+async function testLMStudioConnection(override) {
   try {
     log(LogLevel.INFO, 'LM Studio接続テストを開始します', null, 'BackgroundScript');
 
     const result = await chrome.storage.local.get(['settings']);
-    const settings = result.settings || DEFAULT_SETTINGS;
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      ...(result.settings || {}),
+      ...(override || {})
+    };
 
     log(LogLevel.DEBUG, '接続テスト設定', {
       url: settings.lmStudioUrl
