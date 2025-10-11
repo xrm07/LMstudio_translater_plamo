@@ -18,5 +18,16 @@ export function log(level, message, data = null, scriptName = '') {
   const prefix = scriptName ? `${scriptName}: ` : '';
   const logMessage = `[${timestamp}] [${levelName}] ${prefix}${message}`;
 
-  console.log(logMessage, ...(data ? [data] : []));
+  const args = [logMessage, ...(data ? [data] : [])];
+  if (level === LogLevel.DEBUG) {
+    console.debug(...args);
+  } else if (level === LogLevel.INFO) {
+    console.info(...args);
+  } else if (level === LogLevel.WARN) {
+    console.warn(...args);
+  } else if (level === LogLevel.ERROR) {
+    console.error(...args);
+  } else {
+    console.log(...args);
+  }
 }

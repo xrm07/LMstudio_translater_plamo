@@ -15,7 +15,7 @@
     "paths": {
       "express": ["tests/types/express"]
     },
-    "lib": ["es2020", "dom"],
+    "lib": ["es2020"],
     // For nodejs:
     // "lib": ["esnext"],
     // "types": ["node"],
@@ -40,7 +40,6 @@
 
     // Recommended Options
     "strict": true,
-    "jsx": "react-jsx",
     "verbatimModuleSyntax": false,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,

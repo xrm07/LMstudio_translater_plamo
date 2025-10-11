@@ -94,7 +94,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'testConnection') {
     log(LogLevel.INFO, '接続テストメッセージリクエストを処理します', null, 'BackgroundScript');
 
-    testLMStudioConnection()
+    testLMStudioConnection(request.settingsOverride)
       .then(result => {
         log(LogLevel.DEBUG, '接続テストメッセージレスポンスを送信します', {
           success: result.success
@@ -113,8 +113,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  // E2Eテスト用のデバッグフック
+  // E2Eテスト用のデバッグフック（拡張内ページからの要求のみに制限）
   if (typeof request.e2e === 'string') {
+    const fromExtension = sender?.id === chrome.runtime.id && typeof sender?.url === 'string' && sender.url.startsWith(`chrome-extension://${chrome.runtime.id}/`);
+    if (!fromExtension) {
+      log(LogLevel.WARN, 'E2Eコマンドを拒否しました（未許可ソース）', {
+        senderId: sender?.id,
+        senderUrl: sender?.url
+      }, 'BackgroundScript');
+      sendResponse({ ok: false, error: 'forbidden' });
+      return true;
+    }
     handleE2EMessage(request, sender, sendResponse);
     return true;
   }
@@ -151,15 +160,32 @@ async function handleTranslation(text, tabId) {
         translationLength: result.translation.length
       }, 'BackgroundScript');
 
-      // content scriptに結果を送信
-      chrome.tabs.sendMessage(tabId, {
-        action: 'showTranslation',
-        originalText: text,
-        translatedText: result.translation,
-        sourceLang: sourceLang,
-        targetLang: targetLang,
-        processingTime: result.processingTime
-      });
+      // 最新翻訳を保存（ポップアップの最新カード用）
+      try {
+        const pageUrl = await (async () => {
+          try {
+            const tab = await new Promise((resolve) => {
+              chrome.tabs.get(tabId, (t) => resolve(t));
+            });
+            return typeof tab?.url === 'string' ? tab.url : '';
+          } catch {
+            return '';
+          }
+        })();
+
+        const latest = {
+          id: generateUUID(),
+          originalText: text,
+          translatedText: result.translation,
+          sourceLang,
+          targetLang,
+          timestamp: Date.now(),
+          url: pageUrl
+        };
+        await chrome.storage.local.set({ latest });
+      } catch (e) {
+        log(LogLevel.WARN, '最新翻訳の保存に失敗しました', { error: e?.message }, 'BackgroundScript');
+      }
 
       // 翻訳履歴に保存
       saveToHistory({
@@ -170,7 +196,55 @@ async function handleTranslation(text, tabId) {
         timestamp: Date.now()
       });
 
-      log(LogLevel.DEBUG, '翻訳結果を送信しました', {
+      // autoOpenPopup設定に従って挙動を変更
+      try {
+        const stored = await chrome.storage.local.get(['settings']);
+        const autoOpenPopup = Boolean((stored.settings || DEFAULT_SETTINGS).autoOpenPopup);
+
+        if (autoOpenPopup && chrome.action && typeof chrome.action.openPopup === 'function') {
+          await new Promise((resolve) => {
+            chrome.action.openPopup(() => {
+              const lastError = chrome.runtime.lastError;
+              if (lastError) {
+                // フォールバック：オーバーレイ表示
+                log(LogLevel.WARN, 'autoOpenPopupに失敗したためオーバーレイへフォールバック', { error: lastError.message }, 'BackgroundScript');
+                chrome.tabs.sendMessage(tabId, {
+                  action: 'showTranslation',
+                  originalText: text,
+                  translatedText: result.translation,
+                  sourceLang: sourceLang,
+                  targetLang: targetLang,
+                  processingTime: result.processingTime
+                });
+              }
+              resolve();
+            });
+          });
+        } else {
+          // オーバーレイ表示（従来動作）
+          chrome.tabs.sendMessage(tabId, {
+            action: 'showTranslation',
+            originalText: text,
+            translatedText: result.translation,
+            sourceLang: sourceLang,
+            targetLang: targetLang,
+            processingTime: result.processingTime
+          });
+        }
+      } catch (e) {
+        // 安全側フォールバック：オーバーレイ表示
+        log(LogLevel.WARN, 'autoOpenPopup処理中に例外。オーバーレイへフォールバック', { error: e?.message }, 'BackgroundScript');
+        chrome.tabs.sendMessage(tabId, {
+          action: 'showTranslation',
+          originalText: text,
+          translatedText: result.translation,
+          sourceLang: sourceLang,
+          targetLang: targetLang,
+          processingTime: result.processingTime
+        });
+      }
+
+      log(LogLevel.DEBUG, '翻訳結果を送信しました/処理しました', {
         tabId: tabId,
         processingTime: result.processingTime
       }, 'BackgroundScript');
@@ -416,6 +490,11 @@ async function handleE2EMessage(request, sender, sendResponse) {
             // URLで対象タブを検索してオーバーレイを表示
             const tabs = await chrome.tabs.query({ url: pageUrl });
             const tabId = tabs?.[0]?.id ?? sender.tab?.id;
+            log(LogLevel.DEBUG, 'Fallback overlay dispatch', {
+              pageUrl,
+              queriedTabs: tabs?.length || 0,
+              resolvedTabId: tabId
+            }, 'BackgroundScript');
             if (typeof tabId === 'number') {
               chrome.tabs.sendMessage(tabId, {
                 action: 'showTranslation',
@@ -424,10 +503,22 @@ async function handleE2EMessage(request, sender, sendResponse) {
                 sourceLang,
                 targetLang,
                 processingTime: 0
+              }, () => {
+                const lastError = chrome.runtime.lastError;
+                if (lastError) {
+                  log(LogLevel.WARN, 'Overlay message failed', {
+                    error: lastError.message,
+                    tabId
+                  }, 'BackgroundScript');
+                }
               });
             }
           } catch (e) {
             // タブが取得できない場合は何もしない
+            log(LogLevel.WARN, 'Fallback overlay dispatch failed', {
+              error: e?.message,
+              pageUrl
+            }, 'BackgroundScript');
           }
         }
 
@@ -449,12 +540,16 @@ async function handleE2EMessage(request, sender, sendResponse) {
  * LM Studio接続テスト
  * @returns {Promise<Object>} - 接続テスト結果
  */
-async function testLMStudioConnection() {
+async function testLMStudioConnection(override) {
   try {
     log(LogLevel.INFO, 'LM Studio接続テストを開始します', null, 'BackgroundScript');
 
     const result = await chrome.storage.local.get(['settings']);
-    const settings = result.settings || DEFAULT_SETTINGS;
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      ...(result.settings || {}),
+      ...(override || {})
+    };
 
     log(LogLevel.DEBUG, '接続テスト設定', {
       url: settings.lmStudioUrl
@@ -502,36 +597,45 @@ async function testLMStudioConnection() {
  * @param {Object} entry - 翻訳履歴エントリ
  */
 async function saveToHistory(entry) {
+  // 直列化のためのモジュールスコープキュー
+  if (typeof globalThis.__historyWriteQueue === 'undefined') {
+    Object.defineProperty(globalThis, '__historyWriteQueue', {
+      value: Promise.resolve(),
+      writable: true
+    });
+  }
+
   try {
     log(LogLevel.DEBUG, '翻訳履歴を保存します', {
       sourceLang: entry.sourceLang,
       targetLang: entry.targetLang,
       textLength: entry.originalText.length
     }, 'BackgroundScript');
+    // 直列化して競合回避
+    globalThis.__historyWriteQueue = globalThis.__historyWriteQueue.then(async () => {
+      const result = await chrome.storage.local.get(['history']);
+      let history = result.history || [];
 
-    const result = await chrome.storage.local.get(['history']);
-    let history = result.history || [];
+      const newEntry = {
+        id: generateUUID(),
+        ...entry
+      };
 
-    // 新しいエントリを追加
-    const newEntry = {
-      id: generateUUID(),
-      ...entry
-    };
+      history.unshift(newEntry);
 
-    history.unshift(newEntry);
+      if (history.length > 50) {
+        history = history.slice(0, 50);
+        log(LogLevel.DEBUG, '履歴が上限に達したため古いエントリを削除しました', null, 'BackgroundScript');
+      }
 
-    // 最大50件に制限
-    if (history.length > 50) {
-      history = history.slice(0, 50);
-      log(LogLevel.DEBUG, '履歴が上限に達したため古いエントリを削除しました', null, 'BackgroundScript');
-    }
+      await chrome.storage.local.set({ history });
 
-    await chrome.storage.local.set({ history: history });
-
-    log(LogLevel.INFO, '翻訳履歴を保存しました', {
-      historyCount: history.length,
-      entryId: newEntry.id
-    }, 'BackgroundScript');
+      log(LogLevel.INFO, '翻訳履歴を保存しました', {
+        historyCount: history.length,
+        entryId: newEntry.id
+      }, 'BackgroundScript');
+    });
+    await globalThis.__historyWriteQueue;
   } catch (error) {
     log(LogLevel.ERROR, '翻訳履歴の保存に失敗しました', {
       error: error.message,

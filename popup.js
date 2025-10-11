@@ -9,16 +9,27 @@ import { log, LogLevel } from './logger.js';
 const tabs = document.querySelectorAll('.popup-tab');
 const tabContents = document.querySelectorAll('.popup-content');
 
-const lmstudioUrlInput = document.getElementById('lmstudio-url');
-const modelNameInput = document.getElementById('model-name');
-const maxTokensInput = document.getElementById('max-tokens');
+const lmstudioUrlInput = /** @type {HTMLInputElement|null} */ (document.getElementById('lmstudio-url'));
+const modelNameInput = /** @type {HTMLInputElement|null} */ (document.getElementById('model-name'));
+const maxTokensInput = /** @type {HTMLInputElement|null} */ (document.getElementById('max-tokens'));
+const autoOpenCheckbox = /** @type {HTMLInputElement|null} */ (document.getElementById('auto-open-popup'));
+const modelOptionsList = /** @type {HTMLDataListElement|null} */ (document.getElementById('model-options'));
 
-const testConnectionButton = document.getElementById('test-connection');
-const saveSettingsButton = document.getElementById('save-settings');
-const statusMessage = document.getElementById('status-message');
+const testConnectionButton = /** @type {HTMLButtonElement|null} */ (document.getElementById('test-connection'));
+const saveSettingsButton = /** @type {HTMLButtonElement|null} */ (document.getElementById('save-settings'));
+const statusMessage = /** @type {HTMLDivElement|null} */ (document.getElementById('status-message'));
 
-const clearHistoryButton = document.getElementById('clear-history');
+const clearHistoryButton = /** @type {HTMLButtonElement|null} */ (document.getElementById('clear-history'));
 const historyList = document.getElementById('history-list');
+
+const latestCard = /** @type {HTMLElement|null} */ (document.querySelector('.latest-card'));
+const latestOriginal = /** @type {HTMLElement|null} */ (document.querySelector('.latest-original'));
+const latestTranslated = /** @type {HTMLElement|null} */ (document.querySelector('.latest-translated'));
+const latestLang = /** @type {HTMLElement|null} */ (document.querySelector('.latest-lang'));
+const latestTime = /** @type {HTMLTimeElement|null} */ (document.querySelector('.latest-time'));
+const latestEmpty = /** @type {HTMLElement|null} */ (document.querySelector('.latest-empty'));
+const latestMeta = /** @type {HTMLElement|null} */ (document.getElementById('latest-meta'));
+const latestUrlLink = /** @type {HTMLAnchorElement|null} */ (document.querySelector('.latest-url a'));
 
 // 初期化
 document.addEventListener('DOMContentLoaded', () => {
@@ -26,9 +37,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadSettings();
   loadHistory();
+  loadLatest();
   initTabs();
 
+  chrome.storage.onChanged.addListener(handleStorageChange);
+
   log(LogLevel.INFO, 'ポップアップ初期化完了', null, 'PopupScript');
+});
+
+window.addEventListener('unload', () => {
+  try {
+    chrome.storage.onChanged.removeListener(handleStorageChange);
+  } catch (error) {
+    log(LogLevel.DEBUG, 'storage listener removal skipped', { error: error?.message }, 'PopupScript');
+  }
 });
 
 /**
@@ -85,18 +107,21 @@ function loadSettings() {
       lmStudioUrl: 'http://localhost:1234',
       modelName: 'mmnga/plamo-2-translate-gguf',
       maxTokens: 1000,
-      temperature: 0
+      temperature: 0,
+      autoOpenPopup: false
     };
 
     log(LogLevel.DEBUG, '設定を読み込みました', {
       lmStudioUrl: settings.lmStudioUrl,
       modelName: settings.modelName,
-      maxTokens: settings.maxTokens
+      maxTokens: settings.maxTokens,
+      autoOpenPopup: settings.autoOpenPopup
     }, 'PopupScript');
 
-    lmstudioUrlInput.value = settings.lmStudioUrl;
-    modelNameInput.value = settings.modelName;
-    maxTokensInput.value = settings.maxTokens;
+    if (lmstudioUrlInput) lmstudioUrlInput.value = settings.lmStudioUrl;
+    if (modelNameInput) modelNameInput.value = settings.modelName;
+    if (maxTokensInput) maxTokensInput.value = String(settings.maxTokens);
+    if (autoOpenCheckbox) autoOpenCheckbox.checked = Boolean(settings.autoOpenPopup);
   });
 }
 
@@ -106,11 +131,17 @@ function loadSettings() {
 function saveSettings() {
   log(LogLevel.DEBUG, '設定を保存します', null, 'PopupScript');
 
+  if (!lmstudioUrlInput || !modelNameInput || !maxTokensInput) {
+    log(LogLevel.ERROR, '設定フォーム要素が見つかりません', null, 'PopupScript');
+    return;
+  }
+
   const settings = {
     lmStudioUrl: lmstudioUrlInput.value.trim(),
     modelName: modelNameInput.value.trim(),
     maxTokens: parseInt(maxTokensInput.value, 10),
-    temperature: 0
+    temperature: 0,
+    autoOpenPopup: Boolean(autoOpenCheckbox?.checked)
   };
 
   log(LogLevel.DEBUG, '設定値', {
@@ -154,13 +185,21 @@ async function testConnection() {
   log(LogLevel.INFO, '接続テストを開始します', null, 'PopupScript');
 
   showStatus('🔄 接続テスト中...', 'info');
-  testConnectionButton.disabled = true;
+  if (testConnectionButton) {
+    testConnectionButton.disabled = true;
+  }
 
   try {
     log(LogLevel.DEBUG, '接続テストメッセージを送信します', null, 'PopupScript');
 
+    const override = {
+      lmStudioUrl: lmstudioUrlInput?.value.trim() || 'http://localhost:1234',
+      modelName: modelNameInput?.value.trim() || 'mmnga/plamo-2-translate-gguf'
+    };
+
     const response = await chrome.runtime.sendMessage({
-      action: 'testConnection'
+      action: 'testConnection',
+      settingsOverride: override
     });
 
     if (response.success) {
@@ -170,6 +209,10 @@ async function testConnection() {
         models: response.models.map(m => m.id)
       }, 'PopupScript');
 
+      populateModelOptions(response.models);
+      if (modelNameInput && !modelNameInput.value && response.models[0]?.id) {
+        modelNameInput.value = response.models[0].id;
+      }
       showStatus(`✅ 接続成功！（${modelCount}個のモデルが利用可能）`, 'success');
     } else {
       log(LogLevel.ERROR, '接続テスト失敗', {
@@ -185,7 +228,9 @@ async function testConnection() {
 
     showStatus(`❌ エラー: ${error.message}`, 'error');
   } finally {
-    testConnectionButton.disabled = false;
+    if (testConnectionButton) {
+      testConnectionButton.disabled = false;
+    }
     log(LogLevel.DEBUG, '接続テスト完了', null, 'PopupScript');
   }
 }
@@ -196,6 +241,8 @@ async function testConnection() {
  * @param {string} type - タイプ (success, error, info)
  */
 function showStatus(message, type) {
+  if (!statusMessage) return;
+
   statusMessage.textContent = message;
   statusMessage.className = `status-message status-${type}`;
   statusMessage.style.display = 'block';
@@ -205,6 +252,112 @@ function showStatus(message, type) {
     setTimeout(() => {
       statusMessage.style.display = 'none';
     }, 3000);
+  }
+}
+
+/**
+ * 最新翻訳を読み込み
+ */
+function loadLatest() {
+  chrome.storage.local.get(['latest'], (result) => {
+    renderLatest(result.latest || null);
+  });
+}
+
+/**
+ * 最新翻訳カードを描画
+ * @param {any} latest
+ */
+function renderLatest(latest) {
+  if (!latestCard || !latestOriginal || !latestTranslated || !latestLang) {
+    return;
+  }
+
+  if (!latest) {
+    latestCard.classList.add('hidden');
+    if (latestEmpty) latestEmpty.classList.remove('hidden');
+    if (latestMeta) latestMeta.textContent = '';
+    if (latestTime) {
+      latestTime.textContent = '';
+      latestTime.dateTime = '';
+    }
+    if (latestUrlLink) {
+      latestUrlLink.href = '#';
+      latestUrlLink.setAttribute('tabindex', '-1');
+    }
+    return;
+  }
+
+  latestOriginal.textContent = latest.originalText || '';
+  latestTranslated.textContent = latest.translatedText || '';
+  latestLang.textContent = `${latest.sourceLang || ''} → ${latest.targetLang || ''}`;
+
+  if (latestTime) {
+    const date = new Date(latest.timestamp || Date.now());
+    latestTime.textContent = formatTimestamp(latest.timestamp || Date.now());
+    latestTime.dateTime = date.toISOString();
+  }
+
+  if (latestMeta) {
+    try {
+      const url = new URL(latest.url || '');
+      latestMeta.textContent = url.hostname;
+    } catch {
+      latestMeta.textContent = '';
+    }
+  }
+
+  if (latestUrlLink) {
+    if (latest.url) {
+      latestUrlLink.href = latest.url;
+      latestUrlLink.removeAttribute('tabindex');
+    } else {
+      latestUrlLink.href = '#';
+      latestUrlLink.setAttribute('tabindex', '-1');
+    }
+  }
+
+  latestCard.classList.remove('hidden');
+  if (latestEmpty) latestEmpty.classList.add('hidden');
+}
+
+/**
+ * モデル候補をUIに反映
+ * @param {Array<{id?: string}>} models
+ */
+function populateModelOptions(models) {
+  if (!modelOptionsList) return;
+  modelOptionsList.textContent = '';
+
+  const seen = new Set();
+  for (const model of models || []) {
+    const id = typeof model === 'string' ? model : model?.id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const option = document.createElement('option');
+    option.value = id;
+    modelOptionsList.appendChild(option);
+  }
+}
+
+/**
+ * storage変更リスナー
+ * @param {chrome.storage.StorageChangeRecord} changes
+ * @param {string} area
+ */
+function handleStorageChange(changes, area) {
+  if (area !== 'local') return;
+
+  if (Object.prototype.hasOwnProperty.call(changes, 'settings')) {
+    loadSettings();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(changes, 'history')) {
+    loadHistory();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(changes, 'latest')) {
+    renderLatest(changes.latest.newValue || null);
   }
 }
 
@@ -342,6 +495,6 @@ function escapeHtml(text) {
 }
 
 // イベントリスナー
-saveSettingsButton.addEventListener('click', saveSettings);
-testConnectionButton.addEventListener('click', testConnection);
-clearHistoryButton.addEventListener('click', clearHistory);
+if (saveSettingsButton) saveSettingsButton.addEventListener('click', saveSettings);
+if (testConnectionButton) testConnectionButton.addEventListener('click', testConnection);
+if (clearHistoryButton) clearHistoryButton.addEventListener('click', clearHistory);

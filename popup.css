@@ -18,6 +18,10 @@ body {
   background: #ffffff;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .popup-container {
   display: flex;
   flex-direction: column;
@@ -88,6 +92,29 @@ body {
 /* フォーム */
 .form-group {
   margin-bottom: 20px;
+}
+
+.form-group-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.form-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-switch-input {
+  width: 40px;
+  height: 20px;
+}
+
+.form-switch-input:focus-visible {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
 }
 
 .form-label {
@@ -204,6 +231,86 @@ body {
   background: #ffebee;
   color: #c62828;
   border: 1px solid #ef9a9a;
+}
+
+/* 最新翻訳セクション */
+.latest-section {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.latest-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.latest-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #444444;
+}
+
+.latest-meta {
+  font-size: 12px;
+  color: #777777;
+}
+
+.latest-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.latest-card {
+  border-radius: 10px;
+  border: 1px solid #d0e3ff;
+  background: #ffffff;
+  padding: 12px;
+  box-shadow: 0 2px 4px rgba(26, 115, 232, 0.08);
+}
+
+.latest-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  color: #1a73e8;
+  font-weight: 600;
+}
+
+.latest-original,
+.latest-translated {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
+.latest-arrow {
+  text-align: center;
+  color: #888888;
+  font-size: 16px;
+}
+
+.latest-empty {
+  font-size: 13px;
+  color: #777777;
+}
+
+.latest-url {
+  margin-top: 10px;
+  text-align: right;
+}
+
+.latest-url a {
+  font-size: 13px;
+  color: #1a73e8;
+  text-decoration: none;
+}
+
+.latest-url a:hover {
+  text-decoration: underline;
 }
 
 .status-info {
@@ -461,4 +568,21 @@ body {
   .about-footer {
     border-top-color: #444444;
   }
+  .latest-section {
+    background: #2a2a2a;
+    border-bottom-color: #444444;
+  }
+  .latest-title { color: #e0e0e0; }
+  .latest-meta { color: #888888; }
+  .latest-card {
+    background: #2a2a2a;
+    border-color: #444444;
+    box-shadow: 0 2px 4px rgba(0,0,0,.3);
+  }
+  .latest-card-header { color: #1a73e8; }
+  .latest-original { color: #aaaaaa; }
+  .latest-translated { color: #e0e0e0; }
+  .latest-arrow { color: #888888; }
+  .latest-empty { color: #888888; }
+  .latest-url a { color: #1a73e8; }
 }

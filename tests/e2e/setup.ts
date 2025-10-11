@@ -1,5 +1,6 @@
 // E2Eテストのセットアップ
-// Jestのグローバルセットアップでテスト前に実行される
+// JestのsetupFilesAfterEnvで各テスト前に実行されます
+import { beforeAll } from '@jest/globals';
 
 beforeAll(async () => {
   // 環境変数の設定（オプション）

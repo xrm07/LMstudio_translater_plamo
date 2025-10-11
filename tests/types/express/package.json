@@ -1,4 +1,5 @@
 {
-  "name": "express",
+  "name": "@test-types/express-mock",
+  "version": "0.0.1",
   "types": "index.d.ts"
 }

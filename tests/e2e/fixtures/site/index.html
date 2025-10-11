@@ -74,25 +74,23 @@
       // 各コンテンツエリアをクリックで選択状態にする
       const contentAreas = document.querySelectorAll('.japanese-text, .english-text, .mixed-text');
 
+      const selectContents = function(this: Element) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(this);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      };
+
       contentAreas.forEach(area => {
-        // キーボード操作に対応
         area.setAttribute('tabindex', '0');
-        area.setAttribute('role', 'button');
-        area.addEventListener('click', function() {
-          const selection = window.getSelection();
-          const range = document.createRange();
-          range.selectNodeContents(this);
-          selection.removeAllRanges();
-          selection.addRange(range);
-        });
+        area.setAttribute('role', 'textbox');
+        area.setAttribute('aria-readonly', 'true');
+        area.addEventListener('click', selectContents);
         area.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter' || e.key === ' ') {
+          if (e.key === 'Enter') {
             e.preventDefault();
-            const selection = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(this);
-            selection.removeAllRanges();
-            selection.addRange(range);
+            selectContents.call(this);
           }
         });
       });

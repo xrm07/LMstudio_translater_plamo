@@ -8,6 +8,28 @@
 </head>
 <body>
   <div class="popup-container">
+    <section class="latest-section" aria-labelledby="latest-heading">
+      <div class="latest-header">
+        <h2 id="latest-heading" class="latest-title">最新の翻訳</h2>
+        <span id="latest-meta" class="latest-meta" aria-live="polite"></span>
+      </div>
+      <div class="latest-body">
+        <article class="latest-card hidden" aria-live="polite">
+          <header class="latest-card-header">
+            <span class="latest-lang"></span>
+            <time class="latest-time" datetime=""></time>
+          </header>
+          <p class="latest-original"></p>
+          <div class="latest-arrow" aria-hidden="true">↓</div>
+          <p class="latest-translated"></p>
+          <div class="latest-url">
+            <a href="#" target="_blank" rel="noopener noreferrer">ページを開く</a>
+          </div>
+        </article>
+        <div class="latest-empty">最新の翻訳はまだありません</div>
+      </div>
+    </section>
+
     <!-- ヘッダー -->
     <div class="popup-header">
       <h1 class="popup-title">PLaMo Translate</h1>
@@ -40,9 +62,11 @@
           type="text"
           id="model-name"
           class="form-input"
+          list="model-options"
           placeholder="mmnga/plamo-2-translate-gguf"
         >
         <div class="form-hint">使用する翻訳モデルの識別子</div>
+        <datalist id="model-options"></datalist>
       </div>
 
       <div class="form-group">
@@ -56,6 +80,14 @@
           placeholder="1000"
         >
         <div class="form-hint">翻訳結果の最大長（100〜4096）</div>
+      </div>
+
+      <div class="form-group form-group-inline">
+        <label for="auto-open-popup" class="form-label">自動ポップアップ表示</label>
+        <div class="form-switch">
+          <input type="checkbox" id="auto-open-popup" class="form-switch-input">
+          <span class="form-switch-label">翻訳成功時に自動でポップアップを開く</span>
+        </div>
       </div>
 
       <div class="button-group">
@@ -119,6 +151,6 @@
     </div>
   </div>
 
-  <script src="popup.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>
